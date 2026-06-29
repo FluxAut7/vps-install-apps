@@ -23,7 +23,7 @@ recipe_redis_install() {
   password="$(state_random_hex 16)"
   stack_file="$(stack_path "$stack_name")"
   network_name="$(state_get NETWORK_NAME)"
-  [[ -n "$network_name" ]] || fail "Rede nao configurada. Instale a base primeiro."
+  [[ -n "$network_name" ]] || fail "Rede não configurada. Instale a base primeiro."
 
   stack_render "$VPS_INSTALLER_SOURCE_DIR/templates/redis.yml" "$stack_file" \
     STACK_NAME "$stack_name" \

@@ -7,7 +7,7 @@ recipe_uptime_kuma_install() {
   dependencies_require_base
 
   local version image suffix stack_name domain stack_file network_name
-  version="$(ui_menu "Versao do Uptime Kuma" \
+  version="$(ui_menu "Versão do Uptime Kuma" \
     "1" "v1 - louislam/uptime-kuma:1" \
     "2" "v2 - louislam/uptime-kuma:2")"
   [[ -n "$version" ]] || return 0
@@ -20,7 +20,7 @@ recipe_uptime_kuma_install() {
       image="louislam/uptime-kuma:2"
       ;;
     *)
-      fail "Versao invalida: $version"
+      fail "Versão invalida: $version"
       ;;
   esac
 
@@ -35,12 +35,12 @@ recipe_uptime_kuma_install() {
     fail "Stack ja existe: $stack_name"
   fi
 
-  domain="$(ui_input "Dominio do Uptime Kuma, ex: uptime.seudominio.com.br" "")"
-  [[ -n "$domain" ]] || fail "Dominio obrigatorio."
+  domain="$(ui_input "Domínio do Uptime Kuma, ex: uptime.seudomínio.com.br" "")"
+  [[ -n "$domain" ]] || fail "Domínio obrigatório."
 
   stack_file="$(stack_path "$stack_name")"
   network_name="$(state_get NETWORK_NAME)"
-  [[ -n "$network_name" ]] || fail "Rede nao configurada. Instale a base primeiro."
+  [[ -n "$network_name" ]] || fail "Rede não configurada. Instale a base primeiro."
 
   stack_render "$VPS_INSTALLER_SOURCE_DIR/templates/uptime-kuma.yml" "$stack_file" \
     STACK_NAME "$stack_name" \

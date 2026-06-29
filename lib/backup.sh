@@ -5,8 +5,8 @@ backup_export() {
   local pass pass2 out tmp
   pass="$(ui_password "Senha para criptografar o backup")"
   pass2="$(ui_password "Confirme a senha")"
-  [[ "$pass" == "$pass2" ]] || fail "Senhas nao conferem."
-  [[ -n "$pass" ]] || fail "Senha vazia nao permitida."
+  [[ "$pass" == "$pass2" ]] || fail "Senhas não conferem."
+  [[ -n "$pass" ]] || fail "Senha vazia não permitida."
 
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' RETURN
@@ -27,7 +27,7 @@ EOF
     -in "$tmp/backup.tar.gz" -out "$out" -pass "pass:$pass"
   chmod 600 "$out"
   ui_success "Backup exportado: $out"
-  ui_warn "Dados/volumes/bancos nao foram incluidos neste backup."
+  ui_warn "Dados/volumes/bancos não foram incluídos neste backup."
 }
 
 backup_list() {
@@ -43,14 +43,14 @@ backup_validate_file() {
   local file="$1"
   local pass="$2"
   local tmp
-  [[ -f "$file" ]] || fail "Backup nao encontrado: $file"
+  [[ -f "$file" ]] || fail "Backup não encontrado: $file"
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' RETURN
   openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 \
     -in "$file" -out "$tmp/backup.tar.gz" -pass "pass:$pass" >/dev/null 2>&1 \
-    || fail "Nao foi possivel descriptografar o backup."
-  tar -tzf "$tmp/backup.tar.gz" | grep -q './manifest.env' || fail "Manifesto nao encontrado no backup."
-  ui_success "Backup valido."
+    || fail "Não foi possível descriptografar o backup."
+  tar -tzf "$tmp/backup.tar.gz" | grep -q './manifest.env' || fail "Manifesto não encontrado no backup."
+  ui_success "Backup válido."
 }
 
 backup_validate_interactive() {
@@ -68,9 +68,9 @@ backup_apply_domain_change() {
     keep) return 0 ;;
     base)
       local old_base new_base
-      old_base="$(ui_input "Dominio base antigo, ex: antigo.com.br" "")"
-      new_base="$(ui_input "Dominio base novo, ex: novo.com.br" "")"
-      [[ -n "$old_base" && -n "$new_base" ]] || fail "Dominios base invalidos."
+      old_base="$(ui_input "Domínio base antigo, ex: antigo.com.br" "")"
+      new_base="$(ui_input "Domínio base novo, ex: novo.com.br" "")"
+      [[ -n "$old_base" && -n "$new_base" ]] || fail "Domínios base inválidos."
       find "$root" -type f \( -name '*.env' -o -name '*.yml' \) -print0 \
         | xargs -0 sed -i "s|$(stack_sed_escape "$old_base")|$(stack_sed_escape "$new_base")|g"
       ;;
@@ -80,7 +80,7 @@ backup_apply_domain_change() {
         [[ -f "$app_file" ]] || continue
         old_domain="$(state_get APP_DOMAIN "$app_file" || true)"
         [[ -n "$old_domain" ]] || continue
-        new_domain="$(ui_input "Novo dominio para $old_domain" "$old_domain")"
+        new_domain="$(ui_input "Novo domínio para $old_domain" "$old_domain")"
         [[ "$new_domain" == "$old_domain" ]] && continue
         find "$root" -type f \( -name '*.env' -o -name '*.yml' \) -print0 \
           | xargs -0 sed -i "s|$(stack_sed_escape "$old_domain")|$(stack_sed_escape "$new_domain")|g"
@@ -96,27 +96,27 @@ backup_import() {
   local file pass tmp mode
   file="$(ui_input "Caminho do backup .enc" "")"
   pass="$(ui_password "Senha do backup")"
-  [[ -f "$file" ]] || fail "Backup nao encontrado: $file"
+  [[ -f "$file" ]] || fail "Backup não encontrado: $file"
 
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' RETURN
 
   openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 \
     -in "$file" -out "$tmp/backup.tar.gz" -pass "pass:$pass" >/dev/null 2>&1 \
-    || fail "Nao foi possivel descriptografar o backup."
+    || fail "Não foi possível descriptografar o backup."
   mkdir -p "$tmp/payload"
   tar -C "$tmp/payload" -xzf "$tmp/backup.tar.gz"
-  [[ -f "$tmp/payload/manifest.env" ]] || fail "Manifesto nao encontrado no backup."
+  [[ -f "$tmp/payload/manifest.env" ]] || fail "Manifesto não encontrado no backup."
 
-  mode="$(ui_menu "Dominios no import" \
-    "keep" "Manter dominios originais" \
-    "base" "Trocar dominio base" \
-    "review" "Revisar dominio por dominio")"
+  mode="$(ui_menu "Domínios no import" \
+    "keep" "Manter domínios originais" \
+    "base" "Trocar domínio base" \
+    "review" "Revisar domínio por domínio")"
   [[ -n "$mode" ]] || mode="keep"
   backup_apply_domain_change "$tmp/payload" "$mode"
 
   if ! ui_confirm "Importar estado e recriar stacks nesta VPS?"; then
-    ui_warn "Import cancelado."
+    ui_warn "Importação cancelada."
     return 0
   fi
 

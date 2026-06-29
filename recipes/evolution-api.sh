@@ -20,8 +20,8 @@ recipe_evolution_install() {
     fail "Stack ja existe: $stack_name"
   fi
 
-  domain="$(ui_input "Dominio da Evolution API, ex: evolution.seudominio.com.br" "")"
-  [[ -n "$domain" ]] || fail "Dominio obrigatorio."
+  domain="$(ui_input "Domínio da Evolution API, ex: evolution.seudomínio.com.br" "")"
+  [[ -n "$domain" ]] || fail "Domínio obrigatório."
 
   local pg_file pg_host pg_pass database
   pg_file="$(recipe_postgres_default_file)"

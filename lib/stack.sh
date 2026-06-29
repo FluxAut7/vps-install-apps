@@ -9,7 +9,7 @@ stack_render() {
   local output="$2"
   shift 2
 
-  [[ -f "$template" ]] || fail "Template nao encontrado: $template"
+  [[ -f "$template" ]] || fail "Template não encontrado: $template"
   mkdir -p "$(dirname "$output")"
   cp "$template" "$output"
 

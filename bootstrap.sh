@@ -15,7 +15,7 @@ info() { printf '\033[1;32m[OK]\033[0m %s\n' "$*"; }
 fail() { printf '\033[1;31m[ERRO]\033[0m %s\n' "$*" >&2; exit 1; }
 
 require_command() {
-  command -v "$1" >/dev/null 2>&1 || fail "Comando obrigatorio nao encontrado: $1"
+  command -v "$1" >/dev/null 2>&1 || fail "Comando obrigatório não encontrado: $1"
 }
 
 main() {
@@ -29,7 +29,7 @@ main() {
   info "Baixando instalador..."
   curl -fsSL "$ARCHIVE_URL" | tar -xz --strip-components=1 -C "$tmp_dir"
 
-  [[ -f "$tmp_dir/installer.sh" ]] || fail "installer.sh nao encontrado no pacote baixado."
+  [[ -f "$tmp_dir/installer.sh" ]] || fail "installer.sh não encontrado no pacote baixado."
   chmod +x "$tmp_dir/installer.sh"
 
   if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then

@@ -5,32 +5,32 @@ dependencies_describe() {
   case "$app" in
     postgres|redis|uptime-kuma)
       cat <<'EOF'
-Dependencias:
+Dependências:
 - Base da VPS instalada: Docker, Swarm, rede interna, Traefik e Portainer
 - Portainer API configurada
 EOF
       ;;
     n8n)
       cat <<'EOF'
-Dependencias:
+Dependências:
 - Base da VPS instalada: Docker, Swarm, rede interna, Traefik e Portainer
 - Portainer API configurada
-- PostgreSQL padrao: instalado automaticamente se ainda nao existir
+- PostgreSQL padrão: instalado automaticamente se ainda não existir
 - Redis: incluido dentro da propria stack do n8n
 EOF
       ;;
     evolution-api)
       cat <<'EOF'
-Dependencias:
+Dependências:
 - Base da VPS instalada: Docker, Swarm, rede interna, Traefik e Portainer
 - Portainer API configurada
-- PostgreSQL padrao: instalado automaticamente se ainda nao existir
+- PostgreSQL padrão: instalado automaticamente se ainda não existir
 - Redis: incluido dentro da propria stack da Evolution API
 EOF
       ;;
     *)
       cat <<'EOF'
-Dependencias:
+Dependências:
 - Base da VPS instalada: Docker, Swarm, rede interna, Traefik e Portainer
 - Portainer API configurada
 EOF
@@ -50,13 +50,13 @@ dependencies_require_base() {
 
   local swarm_state
   swarm_state="$(docker info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null || true)"
-  [[ "$swarm_state" == "active" ]] || fail "Docker Swarm nao esta ativo. Instale a base primeiro."
+  [[ "$swarm_state" == "active" ]] || fail "Docker Swarm não está ativo. Instale a base primeiro."
 
   local network_name
   network_name="$(state_get NETWORK_NAME || true)"
-  [[ -n "$network_name" ]] || fail "Rede interna nao configurada. Instale a base primeiro."
+  [[ -n "$network_name" ]] || fail "Rede interna não configurada. Instale a base primeiro."
 
-  docker network inspect "$network_name" >/dev/null 2>&1 || fail "Rede interna nao encontrada: $network_name"
+  docker network inspect "$network_name" >/dev/null 2>&1 || fail "Rede interna não encontrada: $network_name"
 
   portainer_require_config
 }

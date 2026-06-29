@@ -25,7 +25,7 @@ recipe_postgres_install() {
 
   local network_name
   network_name="$(state_get NETWORK_NAME)"
-  [[ -n "$network_name" ]] || fail "Rede nao configurada. Instale a base primeiro."
+  [[ -n "$network_name" ]] || fail "Rede não configurada. Instale a base primeiro."
 
   stack_render "$VPS_INSTALLER_SOURCE_DIR/templates/postgres.yml" "$stack_file" \
     STACK_NAME "$stack_name" \
@@ -42,7 +42,7 @@ recipe_postgres_install() {
 
   ui_success "PostgreSQL instalado."
   echo "Host: $service_name"
-  echo "Usuario: postgres"
+  echo "Usuário: postgres"
   echo "Senha: $password"
   ui_pause
 }
@@ -61,7 +61,7 @@ recipe_postgres_install_default() {
   password="$(state_random_hex 16)"
   stack_file="$(stack_path "$stack_name")"
   network_name="$(state_get NETWORK_NAME)"
-  [[ -n "$network_name" ]] || fail "Rede nao configurada. Instale a base primeiro."
+  [[ -n "$network_name" ]] || fail "Rede não configurada. Instale a base primeiro."
 
   stack_render "$VPS_INSTALLER_SOURCE_DIR/templates/postgres.yml" "$stack_file" \
     STACK_NAME "$stack_name" \
@@ -88,20 +88,20 @@ recipe_postgres_ensure_default() {
   if recipe_postgres_default_file >/dev/null; then
     return 0
   fi
-  ui_warn "PostgreSQL padrao nao encontrado. Instalando stack postgres automaticamente."
+  ui_warn "PostgreSQL padrão não encontrado. Instalando stack postgres automaticamente."
   recipe_postgres_install_default
 }
 
 recipe_postgres_create_database() {
   local database="$1"
   local pg_file
-  pg_file="$(recipe_postgres_default_file)" || fail "PostgreSQL padrao nao encontrado."
+  pg_file="$(recipe_postgres_default_file)" || fail "PostgreSQL padrão não encontrado."
   state_source "$pg_file"
 
   local container_id
   container_id="$(docker ps --filter "name=postgres_postgres" --format '{{.ID}}' | head -n 1)"
   [[ -n "$container_id" ]] || {
-    ui_warn "Container Postgres ainda nao encontrado. O banco sera criado pela aplicacao se suportado."
+    ui_warn "Container Postgres ainda não encontrado. O banco será criado pela aplicação se suportado."
     return 0
   }
 

@@ -20,9 +20,9 @@ recipe_n8n_install() {
     fail "Stack ja existe: $stack_name"
   fi
 
-  editor_domain="$(ui_input "Dominio do editor n8n, ex: n8n.seudominio.com.br" "")"
-  webhook_domain="$(ui_input "Dominio dos webhooks n8n, ex: webhook.seudominio.com.br" "$editor_domain")"
-  [[ -n "$editor_domain" && -n "$webhook_domain" ]] || fail "Dominios obrigatorios."
+  editor_domain="$(ui_input "Domínio do editor n8n, ex: n8n.seudomínio.com.br" "")"
+  webhook_domain="$(ui_input "Domínio dos webhooks n8n, ex: webhook.seudomínio.com.br" "$editor_domain")"
+  [[ -n "$editor_domain" && -n "$webhook_domain" ]] || fail "Domínios obrigatórios."
 
   local pg_file pg_host pg_pass
   pg_file="$(recipe_postgres_default_file)"

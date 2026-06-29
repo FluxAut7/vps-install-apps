@@ -35,14 +35,14 @@ export VPS_INSTALLER_SOURCE_DIR="$SCRIPT_DIR"
 installer_header() {
   ui_clear
   ui_title "VPS Installer"
-  echo "Instalador interativo para Docker Swarm, Traefik, Portainer e apps de automacao."
+  echo "Instalador interativo para Docker Swarm, Traefik, Portainer e apps de automação."
   echo
 }
 
 show_status() {
   installer_header
   state_init
-  echo "Diretorio: $VPSI_HOME"
+  echo "Diretório: $VPSI_HOME"
   echo
 
   if command -v docker >/dev/null 2>&1; then
@@ -53,7 +53,7 @@ show_status() {
     echo "Stacks:"
     docker stack ls 2>/dev/null || true
   else
-    echo "Docker nao instalado."
+    echo "Docker não instalado."
   fi
 
   echo
@@ -71,7 +71,7 @@ remove_stack_menu() {
   stack="$(ui_input "Nome da stack para remover" "")"
   [[ -n "$stack" ]] || return 0
 
-  if ui_confirm "Remover a stack '$stack'? Volumes persistentes nao serao apagados."; then
+  if ui_confirm "Remover a stack '$stack'? Volumes persistentes não serão apagados."; then
     portainer_remove_stack "$stack"
     state_remove_app "$stack" || true
     ui_success "Stack removida: $stack"
@@ -83,8 +83,8 @@ portainer_reset_credentials() {
   installer_header
   state_init
   local url user pass
-  url="$(ui_input "URL do Portainer, ex: https://portainer.seudominio.com.br" "$(state_get PORTAINER_URL "$STATE_DIR/portainer.env" || true)")"
-  user="$(ui_input "Usuario do Portainer" "$(state_get PORTAINER_USER "$STATE_DIR/portainer.env" || true)")"
+  url="$(ui_input "URL do Portainer, ex: https://portainer.seudomínio.com.br" "$(state_get PORTAINER_URL "$STATE_DIR/portainer.env" || true)")"
+  user="$(ui_input "Usuário do Portainer" "$(state_get PORTAINER_USER "$STATE_DIR/portainer.env" || true)")"
   pass="$(ui_password "Senha do Portainer")"
   [[ -n "$url" && -n "$user" && -n "$pass" ]] || fail "Credenciais incompletas."
   state_set PORTAINER_URL "$url" "$STATE_DIR/portainer.env"
@@ -101,8 +101,8 @@ backup_menu() {
   while true; do
     installer_header
     local choice
-    choice="$(ui_menu "Backup / Migracao" \
-      "1" "Exportar configuracoes e credenciais" \
+    choice="$(ui_menu "Backup / Migração" \
+      "1" "Exportar configurações e credenciais" \
       "2" "Importar backup nesta VPS" \
       "3" "Listar backups locais" \
       "4" "Validar backup" \
@@ -131,8 +131,8 @@ main_menu() {
       "6" "Instalar Evolution API" \
       "7" "Status" \
       "8" "Remover stack" \
-      "9" "Resetar credenciais do Portainer" \
-      "10" "Backup / Migracao" \
+      "9" "Redefinir credenciais do Portainer" \
+      "10" "Backup / Migração" \
       "11" "Atualizar pacotes da VPS" \
       "0" "Sair")"
 

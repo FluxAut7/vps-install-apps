@@ -87,7 +87,7 @@ state_list_apps() {
     echo "Nenhum app registrado."
     return 0
   fi
-  awk -F '\t' '{ printf "- %s (%s) stack=%s dominio=%s\n", $1, $3, $2, $4 }' "$STATE_DIR/apps.tsv"
+  awk -F '\t' '{ printf "- %s (%s) stack=%s domínio=%s\n", $1, $3, $2, $4 }' "$STATE_DIR/apps.tsv"
 }
 
 state_random_hex() {

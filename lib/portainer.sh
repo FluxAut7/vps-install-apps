@@ -6,7 +6,7 @@ PORTAINER_SWARM_ID=""
 
 portainer_require_config() {
   state_init
-  state_source "$STATE_DIR/portainer.env" || fail "Credenciais do Portainer nao configuradas. Instale a base primeiro."
+  state_source "$STATE_DIR/portainer.env" || fail "Credenciais do Portainer não configuradas. Instale a base primeiro."
   [[ -n "${PORTAINER_API_URL:-${PORTAINER_URL:-}}" && -n "${PORTAINER_USER:-}" && -n "${PORTAINER_PASSWORD:-}" ]] \
     || fail "Credenciais do Portainer incompletas."
 }
@@ -23,7 +23,7 @@ portainer_login() {
     -H "Content-Type: application/json" \
     -d "{\"username\":\"$PORTAINER_USER\",\"password\":\"$PORTAINER_PASSWORD\"}")"
   PORTAINER_JWT="$(printf '%s' "$response" | jq -r '.jwt // empty')"
-  [[ -n "$PORTAINER_JWT" ]] || fail "Nao foi possivel autenticar no Portainer."
+  [[ -n "$PORTAINER_JWT" ]] || fail "Não foi possível autenticar no Portainer."
   printf '%s' "$PORTAINER_JWT"
 }
 
@@ -33,7 +33,7 @@ portainer_endpoint_id() {
   base="$(portainer_api_base)"
   response="$(curl -k -fsSL "$base/api/endpoints" -H "Authorization: Bearer $PORTAINER_JWT")"
   PORTAINER_ENDPOINT_ID="$(printf '%s' "$response" | jq -r 'map(select(.Type == 2 or .Type == 1)) | .[0].Id // empty')"
-  [[ -n "$PORTAINER_ENDPOINT_ID" ]] || fail "Endpoint do Portainer nao encontrado."
+  [[ -n "$PORTAINER_ENDPOINT_ID" ]] || fail "Endpoint do Portainer não encontrado."
   printf '%s' "$PORTAINER_ENDPOINT_ID"
 }
 
@@ -45,7 +45,7 @@ portainer_swarm_id() {
   response="$(curl -k -fsSL "$base/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/swarm" \
     -H "Authorization: Bearer $PORTAINER_JWT")"
   PORTAINER_SWARM_ID="$(printf '%s' "$response" | jq -r '.ID // empty')"
-  [[ -n "$PORTAINER_SWARM_ID" ]] || fail "Swarm ID nao encontrado pelo Portainer."
+  [[ -n "$PORTAINER_SWARM_ID" ]] || fail "Swarm ID não encontrado pelo Portainer."
   printf '%s' "$PORTAINER_SWARM_ID"
 }
 
@@ -93,7 +93,7 @@ portainer_remove_stack() {
   local stack_name="$1"
   local stack_id
   stack_id="$(portainer_stack_id "$stack_name")"
-  [[ -n "$stack_id" ]] || fail "Stack nao encontrada no Portainer: $stack_name"
+  [[ -n "$stack_id" ]] || fail "Stack não encontrada no Portainer: $stack_name"
 
   local base
   base="$(portainer_api_base)"

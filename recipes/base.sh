@@ -6,19 +6,19 @@ recipe_base_install() {
   system_detect_os
 
   local portainer_domain portainer_user portainer_password server_name network_name ssl_email
-  portainer_domain="$(ui_input "Dominio do Portainer, ex: portainer.seudominio.com.br" "$(state_get PORTAINER_DOMAIN "$STATE_DIR/config.env" || true)")"
-  portainer_user="$(ui_input "Usuario admin do Portainer" "admin")"
+  portainer_domain="$(ui_input "Domínio do Portainer, ex: portainer.seudomínio.com.br" "$(state_get PORTAINER_DOMAIN "$STATE_DIR/config.env" || true)")"
+  portainer_user="$(ui_input "Usuário admin do Portainer" "admin")"
   portainer_password="$(ui_password "Senha admin do Portainer, minimo recomendado 12 caracteres")"
   server_name="$(ui_input "Nome do servidor, sem espacos" "$(hostname)")"
   network_name="$(ui_input "Nome da rede interna do Swarm" "vps_public")"
   ssl_email="$(ui_input "Email para certificados Let's Encrypt" "")"
 
   [[ -n "$portainer_domain" && -n "$portainer_user" && -n "$portainer_password" && -n "$network_name" && -n "$ssl_email" ]] \
-    || fail "Campos obrigatorios nao preenchidos."
+    || fail "Campos obrigatórios não preenchidos."
 
   local summary
   summary="Portainer: https://$portainer_domain
-Usuario: $portainer_user
+Usuário: $portainer_user
 Servidor: $server_name
 Rede interna: $network_name
 Email SSL: $ssl_email"
@@ -59,7 +59,7 @@ Email SSL: $ssl_email"
   state_register_app "portainer" "portainer" "base" "$portainer_domain" "portainer/portainer-ce:latest" "$portainer_stack"
 
   ui_success "Base instalada."
-  ui_warn "Confirme se o DNS do dominio aponta para esta VPS antes de depender do HTTPS."
+  ui_warn "Confirme se o DNS do domínio aponta para esta VPS antes de depender do HTTPS."
   ui_pause
 }
 
@@ -76,7 +76,7 @@ recipe_base_init_portainer() {
       -H "Content-Type: application/json" \
       -d "{\"Username\":\"$user\",\"Password\":\"$password\"}" || true)"
     if printf '%s' "$response" | grep -q '"Username"'; then
-      ui_success "Usuario admin criado no Portainer."
+      ui_success "Usuário admin criado no Portainer."
       break
     fi
     if printf '%s' "$response" | grep -qi 'already'; then
@@ -92,7 +92,7 @@ recipe_base_init_portainer() {
   state_set PORTAINER_PASSWORD "$password" "$STATE_DIR/portainer.env"
 
   portainer_login >/dev/null || {
-    ui_warn "Nao foi possivel autenticar via $api_url. Tentando HTTPS do dominio..."
+    ui_warn "Não foi possível autenticar via $api_url. Tentando HTTPS do domínio..."
     state_set PORTAINER_API_URL "https://$domain" "$STATE_DIR/portainer.env"
     portainer_login >/dev/null
   }

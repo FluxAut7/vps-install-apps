@@ -7,7 +7,7 @@ system_require_root() {
 }
 
 system_detect_os() {
-  [[ -f /etc/os-release ]] || fail "Nao foi possivel detectar o sistema operacional."
+  [[ -f /etc/os-release ]] || fail "Não foi possível detectar o sistema operacional."
   # shellcheck disable=SC1091
   . /etc/os-release
 
@@ -19,7 +19,7 @@ system_detect_os() {
       [[ "${VERSION_ID:-}" == "12" ]] || fail "Debian suportado: 12."
       ;;
     *)
-      fail "Sistema nao suportado: ${PRETTY_NAME:-desconhecido}"
+      fail "Sistema não suportado: ${PRETTY_NAME:-desconhecido}"
       ;;
   esac
 
@@ -61,7 +61,7 @@ system_install_docker() {
 }
 
 system_require_docker() {
-  command -v docker >/dev/null 2>&1 || fail "Docker nao instalado. Instale a base primeiro."
+  command -v docker >/dev/null 2>&1 || fail "Docker não instalado. Instale a base primeiro."
 }
 
 system_init_swarm() {
@@ -95,7 +95,7 @@ system_wait_stack() {
   local timeout="${2:-180}"
   local elapsed=0
 
-  ui_info "Aguardando servicos de $service_prefix ficarem online..."
+  ui_info "Aguardando serviços de $service_prefix ficarem online..."
   while (( elapsed < timeout )); do
     if docker service ls --format '{{.Name}} {{.Replicas}}' | awk -v p="$service_prefix" '$1 ~ "^"p"_" && $2 !~ /^0\// { ok=1 } END { exit ok ? 0 : 1 }'; then
       ui_success "Servicos detectados para $service_prefix."
@@ -112,20 +112,20 @@ system_wait_stack() {
 system_upgrade_packages_interactive() {
   ui_clear
   ui_title "Atualizar pacotes da VPS"
-  ui_warn "Esta acao executa apt-get update e apt-get upgrade -y. Pode demorar e reiniciar servicos durante atualizacoes."
+  ui_warn "Esta ação executa apt-get update e apt-get upgrade -y. Pode demorar e reiniciar serviços durante atualizações."
 
-  if ! ui_confirm "Deseja continuar com a atualizacao dos pacotes da VPS?"; then
-    ui_warn "Atualizacao cancelada."
+  if ! ui_confirm "Deseja continuar com a atualização dos pacotes da VPS?"; then
+    ui_warn "Atualização cancelada."
     ui_pause
     return 0
   fi
 
-  ui_info "Atualizando indice de pacotes..."
+  ui_info "Atualizando índice de pacotes..."
   apt-get update -y
 
   ui_info "Atualizando pacotes instalados..."
   DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
 
-  ui_success "Atualizacao de pacotes concluida."
+  ui_success "Atualização de pacotes concluída."
   ui_pause
 }

@@ -6,21 +6,21 @@ ui_clear() {
 
 ui_title() {
   local title="$1"
-  printf '\033[1;33m============================================================\033[0m\n'
-  printf '\033[1;97m%s\033[0m\n' "$title"
-  printf '\033[1;33m============================================================\033[0m\n'
+  printf '\033[1;33m============================================================\033[0m\n' >&2
+  printf '\033[1;97m%s\033[0m\n' "$title" >&2
+  printf '\033[1;33m============================================================\033[0m\n' >&2
 }
 
 ui_info() {
-  printf '\033[1;34m[INFO]\033[0m %s\n' "$*"
+  printf '\033[1;34m[INFO]\033[0m %s\n' "$*" >&2
 }
 
 ui_success() {
-  printf '\033[1;32m[OK]\033[0m %s\n' "$*"
+  printf '\033[1;32m[OK]\033[0m %s\n' "$*" >&2
 }
 
 ui_warn() {
-  printf '\033[1;33m[AVISO]\033[0m %s\n' "$*"
+  printf '\033[1;33m[AVISO]\033[0m %s\n' "$*" >&2
 }
 
 ui_error() {
@@ -33,12 +33,13 @@ fail() {
 }
 
 ui_pause() {
-  echo
-  read -r -p "Pressione Enter para continuar..." _
+  echo >&2
+  printf 'Pressione Enter para continuar...' >&2
+  read -r _
 }
 
 ui_has_dialog() {
-  command -v dialog >/dev/null 2>&1 && [[ -t 0 && -t 1 ]]
+  command -v dialog >/dev/null 2>&1 && [[ -t 0 && -t 2 ]]
 }
 
 ui_menu() {
@@ -47,21 +48,21 @@ ui_menu() {
 
   if ui_has_dialog; then
     local result
-    result="$(dialog --clear --stdout --title "$title" --menu "Escolha uma opcao:" 22 78 14 "$@")" || true
+    result="$(dialog --clear --stdout --title "$title" --menu "Escolha uma opção:" 22 78 14 "$@")" || true
     printf '%s' "$result"
     return 0
   fi
 
-  echo "$title"
-  echo
+  printf '%s\n\n' "$title" >&2
   local args=("$@")
   local i
   for ((i=0; i<${#args[@]}; i+=2)); do
-    printf '  [%s] %s\n' "${args[$i]}" "${args[$((i+1))]}"
+    printf '  [%s] %s\n' "${args[$i]}" "${args[$((i+1))]}" >&2
   done
-  echo
+  echo >&2
   local choice
-  read -r -p "Opcao: " choice
+  printf 'Opção: ' >&2
+  read -r choice
   printf '%s' "$choice"
 }
 
@@ -76,10 +77,12 @@ ui_input() {
 
   local value
   if [[ -n "$default" ]]; then
-    read -r -p "$prompt [$default]: " value
+    printf '%s [%s]: ' "$prompt" "$default" >&2
+    read -r value
     printf '%s' "${value:-$default}"
   else
-    read -r -p "$prompt: " value
+    printf '%s: ' "$prompt" >&2
+    read -r value
     printf '%s' "$value"
   fi
 }
@@ -93,7 +96,8 @@ ui_password() {
   fi
 
   local value
-  read -r -s -p "$prompt: " value
+  printf '%s: ' "$prompt" >&2
+  read -r -s value
   echo >&2
   printf '%s' "$value"
 }
@@ -107,8 +111,9 @@ ui_confirm() {
   fi
 
   local answer
-  read -r -p "$prompt (Y/N): " answer
-  [[ "$answer" =~ ^[Yy]$ ]]
+  printf '%s (S/N): ' "$prompt" >&2
+  read -r answer
+  [[ "$answer" =~ ^[SsYy]$ ]]
 }
 
 ui_confirm_values() {
@@ -121,7 +126,7 @@ ui_confirm_values() {
   fi
 
   ui_title "$title"
-  printf '%s\n' "$body"
-  echo
-  ui_confirm "As informacoes estao corretas?"
+  printf '%s\n' "$body" >&2
+  echo >&2
+  ui_confirm "As informações estão corretas?"
 }

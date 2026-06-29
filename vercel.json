@@ -1,0 +1,17 @@
+{
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/api/bootstrap"
+    },
+    {
+      "source": "/bootstrap.sh",
+      "destination": "/api/bootstrap"
+    }
+  ],
+  "functions": {
+    "api/bootstrap.js": {
+      "includeFiles": "bootstrap.sh"
+    }
+  }
+}

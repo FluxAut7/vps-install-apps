@@ -1,0 +1,63 @@
+version: "3.8"
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "__REDIS_PASSWORD__"]
+    volumes:
+      - __STACK_NAME___redis:/data
+    networks:
+      - __NETWORK_NAME__
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+
+  api:
+    image: evoapicloud/evolution-api:latest
+    volumes:
+      - __STACK_NAME___instances:/evolution/instances
+    networks:
+      - __NETWORK_NAME__
+    environment:
+      SERVER_URL: "https://__DOMAIN__"
+      AUTHENTICATION_API_KEY: "__API_KEY__"
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "true"
+      LANGUAGE: pt-BR
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: "postgresql://postgres:__POSTGRES_PASSWORD__@__POSTGRES_HOST__:5432/__POSTGRES_DATABASE__"
+      DATABASE_CONNECTION_CLIENT_NAME: "__STACK_NAME__"
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "true"
+      DATABASE_SAVE_DATA_CONTACTS: "true"
+      DATABASE_SAVE_DATA_CHATS: "true"
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: "redis://:__REDIS_PASSWORD__@redis:6379/1"
+      CACHE_REDIS_PREFIX_KEY: "__STACK_NAME__"
+      CACHE_LOCAL_ENABLED: "false"
+      TELEMETRY: "false"
+      WEBSOCKET_ENABLED: "false"
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.__STACK_NAME__.rule=Host(`__DOMAIN__`)"
+        - "traefik.http.routers.__STACK_NAME__.entrypoints=websecure"
+        - "traefik.http.routers.__STACK_NAME__.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.__STACK_NAME__.loadbalancer.server.port=8080"
+        - "traefik.docker.network=__NETWORK_NAME__"
+
+volumes:
+  __STACK_NAME___instances:
+    name: __STACK_NAME___instances
+  __STACK_NAME___redis:
+    name: __STACK_NAME___redis
+
+networks:
+  __NETWORK_NAME__:
+    external: true

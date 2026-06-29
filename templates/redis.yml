@@ -1,0 +1,24 @@
+version: "3.8"
+
+services:
+  __SERVICE_NAME__:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "__REDIS_PASSWORD__"]
+    volumes:
+      - __STACK_NAME___data:/data
+    networks:
+      - __NETWORK_NAME__
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+
+volumes:
+  __STACK_NAME___data:
+    name: __STACK_NAME___data
+
+networks:
+  __NETWORK_NAME__:
+    external: true

@@ -3,8 +3,8 @@
 recipe_postgres_install() {
   ui_clear
   ui_title "Instalar PostgreSQL"
-  system_require_docker
-  portainer_require_config
+  dependencies_confirm "postgres" || return 0
+  dependencies_require_base
 
   local suffix stack_name service_name password stack_file
   suffix="$(ui_input "Sufixo opcional da stack, vazio para postgres" "")"
@@ -48,8 +48,7 @@ recipe_postgres_install() {
 }
 
 recipe_postgres_install_default() {
-  system_require_docker
-  portainer_require_config
+  dependencies_require_base
 
   local stack_name="postgres"
   local service_name="postgres"

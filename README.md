@@ -37,8 +37,12 @@ VPS_INSTALLER_ARCHIVE_URL="https://github.com/FluxAut7/vps-install-apps/archive/
 - PostgreSQL
 - Redis
 - n8n
-- Uptime Kuma
+- Uptime Kuma v1/v2
 - Evolution API
+
+## Mapa de dependencias
+
+Antes de instalar uma ferramenta, o instalador mostra as dependencias necessarias. Na v1, a base obrigatoria e Docker Swarm + rede interna + Traefik + Portainer API. Apps como n8n e Evolution API tambem declaram PostgreSQL padrao, instalado automaticamente se ainda nao existir.
 
 ## Estado local
 

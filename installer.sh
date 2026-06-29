@@ -16,6 +16,8 @@ export VPS_INSTALLER_SOURCE_DIR="$SCRIPT_DIR"
 . "$SCRIPT_DIR/lib/portainer.sh"
 # shellcheck source=lib/backup.sh
 . "$SCRIPT_DIR/lib/backup.sh"
+# shellcheck source=lib/dependencies.sh
+. "$SCRIPT_DIR/lib/dependencies.sh"
 
 # shellcheck source=recipes/base.sh
 . "$SCRIPT_DIR/recipes/base.sh"

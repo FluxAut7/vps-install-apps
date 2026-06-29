@@ -3,8 +3,8 @@
 recipe_evolution_install() {
   ui_clear
   ui_title "Instalar Evolution API"
-  system_require_docker
-  portainer_require_config
+  dependencies_confirm "evolution-api" || return 0
+  dependencies_require_base
 
   recipe_postgres_ensure_default
 

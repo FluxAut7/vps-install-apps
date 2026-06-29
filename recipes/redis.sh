@@ -3,8 +3,8 @@
 recipe_redis_install() {
   ui_clear
   ui_title "Instalar Redis"
-  system_require_docker
-  portainer_require_config
+  dependencies_confirm "redis" || return 0
+  dependencies_require_base
 
   local suffix stack_name service_name password stack_file network_name
   suffix="$(ui_input "Sufixo opcional da stack, vazio para redis" "")"

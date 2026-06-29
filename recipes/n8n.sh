@@ -3,8 +3,8 @@
 recipe_n8n_install() {
   ui_clear
   ui_title "Instalar n8n"
-  system_require_docker
-  portainer_require_config
+  dependencies_confirm "n8n" || return 0
+  dependencies_require_base
 
   recipe_postgres_ensure_default
 

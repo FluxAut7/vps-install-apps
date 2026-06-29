@@ -25,6 +25,8 @@ export VPS_INSTALLER_SOURCE_DIR="$SCRIPT_DIR"
 . "$SCRIPT_DIR/recipes/redis.sh"
 # shellcheck source=recipes/n8n.sh
 . "$SCRIPT_DIR/recipes/n8n.sh"
+# shellcheck source=recipes/uptime-kuma.sh
+. "$SCRIPT_DIR/recipes/uptime-kuma.sh"
 # shellcheck source=recipes/evolution-api.sh
 . "$SCRIPT_DIR/recipes/evolution-api.sh"
 
@@ -123,12 +125,13 @@ main_menu() {
       "2" "Instalar PostgreSQL" \
       "3" "Instalar Redis" \
       "4" "Instalar n8n" \
-      "5" "Instalar Evolution API" \
-      "6" "Status" \
-      "7" "Remover stack" \
-      "8" "Resetar credenciais do Portainer" \
-      "9" "Backup / Migracao" \
-      "10" "Atualizar pacotes da VPS" \
+      "5" "Instalar Uptime Kuma" \
+      "6" "Instalar Evolution API" \
+      "7" "Status" \
+      "8" "Remover stack" \
+      "9" "Resetar credenciais do Portainer" \
+      "10" "Backup / Migracao" \
+      "11" "Atualizar pacotes da VPS" \
       "0" "Sair")"
 
     case "$choice" in
@@ -136,12 +139,13 @@ main_menu() {
       2) recipe_postgres_install ;;
       3) recipe_redis_install ;;
       4) recipe_n8n_install ;;
-      5) recipe_evolution_install ;;
-      6) show_status ;;
-      7) remove_stack_menu ;;
-      8) portainer_reset_credentials ;;
-      9) backup_menu ;;
-      10) system_upgrade_packages_interactive ;;
+      5) recipe_uptime_kuma_install ;;
+      6) recipe_evolution_install ;;
+      7) show_status ;;
+      8) remove_stack_menu ;;
+      9) portainer_reset_credentials ;;
+      10) backup_menu ;;
+      11) system_upgrade_packages_interactive ;;
       0|"") ui_info "Saindo."; exit 0 ;;
     esac
   done

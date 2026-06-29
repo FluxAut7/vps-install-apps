@@ -1,0 +1,31 @@
+version: "3.8"
+
+services:
+  app:
+    image: __IMAGE__
+    volumes:
+      - __STACK_NAME___data:/app/data
+    networks:
+      - __NETWORK_NAME__
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.__STACK_NAME__.rule=Host(`__DOMAIN__`)"
+        - "traefik.http.routers.__STACK_NAME__.entrypoints=websecure"
+        - "traefik.http.routers.__STACK_NAME__.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.__STACK_NAME__.service=__STACK_NAME__"
+        - "traefik.http.services.__STACK_NAME__.loadbalancer.server.port=3001"
+        - "traefik.docker.network=__NETWORK_NAME__"
+
+volumes:
+  __STACK_NAME___data:
+    name: __STACK_NAME___data
+
+networks:
+  __NETWORK_NAME__:
+    external: true

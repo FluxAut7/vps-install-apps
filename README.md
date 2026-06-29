@@ -37,6 +37,7 @@ VPS_INSTALLER_ARCHIVE_URL="https://github.com/FluxAut7/vps-install-apps/archive/
 - PostgreSQL
 - Redis
 - n8n
+- Uptime Kuma
 - Evolution API
 
 ## Estado local

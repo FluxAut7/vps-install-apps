@@ -108,3 +108,24 @@ system_wait_stack() {
   ui_warn "Timeout aguardando $service_prefix. Verifique com: docker service ls"
   return 1
 }
+
+system_upgrade_packages_interactive() {
+  ui_clear
+  ui_title "Atualizar pacotes da VPS"
+  ui_warn "Esta acao executa apt-get update e apt-get upgrade -y. Pode demorar e reiniciar servicos durante atualizacoes."
+
+  if ! ui_confirm "Deseja continuar com a atualizacao dos pacotes da VPS?"; then
+    ui_warn "Atualizacao cancelada."
+    ui_pause
+    return 0
+  fi
+
+  ui_info "Atualizando indice de pacotes..."
+  apt-get update -y
+
+  ui_info "Atualizando pacotes instalados..."
+  DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
+
+  ui_success "Atualizacao de pacotes concluida."
+  ui_pause
+}

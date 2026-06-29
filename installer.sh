@@ -128,6 +128,7 @@ main_menu() {
       "7" "Remover stack" \
       "8" "Resetar credenciais do Portainer" \
       "9" "Backup / Migracao" \
+      "10" "Atualizar pacotes da VPS" \
       "0" "Sair")"
 
     case "$choice" in
@@ -140,6 +141,7 @@ main_menu() {
       7) remove_stack_menu ;;
       8) portainer_reset_credentials ;;
       9) backup_menu ;;
+      10) system_upgrade_packages_interactive ;;
       0|"") ui_info "Saindo."; exit 0 ;;
     esac
   done

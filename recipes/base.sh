@@ -5,13 +5,31 @@ recipe_base_install() {
   ui_title "Preparar VPS"
   system_detect_os
 
-  local portainer_domain portainer_user portainer_password server_name network_name ssl_email
+  local portainer_domain portainer_user portainer_password server_name network_name ssl_email portainer_channel portainer_image portainer_agent_image
   portainer_domain="$(ui_input "Domínio do Portainer, ex: portainer.seudomínio.com.br" "$(state_get PORTAINER_DOMAIN "$STATE_DIR/config.env" || true)")"
   portainer_user="$(ui_input "Usuário admin do Portainer" "admin")"
-  portainer_password="$(ui_password "Senha admin do Portainer, minimo recomendado 12 caracteres")"
-  server_name="$(ui_input "Nome do servidor, sem espacos" "$(hostname)")"
+  portainer_password="$(ui_password "Senha admin do Portainer, mínimo recomendado 12 caracteres")"
+  server_name="$(ui_input "Nome do servidor, sem espaços" "$(hostname)")"
   network_name="$(ui_input "Nome da rede interna do Swarm" "vps_public")"
   ssl_email="$(ui_input "Email para certificados Let's Encrypt" "")"
+  portainer_channel="$(ui_menu "Canal do Portainer" \
+    "lts" "LTS - recomendado para produção" \
+    "sts" "STS - novidades mais recentes")"
+  [[ -n "$portainer_channel" ]] || return 0
+
+  case "$portainer_channel" in
+    lts)
+      portainer_image="portainer/portainer-ce:lts"
+      portainer_agent_image="portainer/agent:lts"
+      ;;
+    sts)
+      portainer_image="portainer/portainer-ce:sts"
+      portainer_agent_image="portainer/agent:sts"
+      ;;
+    *)
+      fail "Canal do Portainer inválido: $portainer_channel"
+      ;;
+  esac
 
   [[ -n "$portainer_domain" && -n "$portainer_user" && -n "$portainer_password" && -n "$network_name" && -n "$ssl_email" ]] \
     || fail "Campos obrigatórios não preenchidos."
@@ -21,7 +39,9 @@ recipe_base_install() {
 Usuário: $portainer_user
 Servidor: $server_name
 Rede interna: $network_name
-Email SSL: $ssl_email"
+Email SSL: $ssl_email
+Canal do Portainer: $portainer_channel
+Imagem Portainer: $portainer_image"
   ui_confirm_values "Confirmar dados" "$summary" || return 0
 
   system_install_docker
@@ -32,6 +52,9 @@ Email SSL: $ssl_email"
   state_set NETWORK_NAME "$network_name"
   state_set SSL_EMAIL "$ssl_email"
   state_set PORTAINER_DOMAIN "$portainer_domain"
+  state_set PORTAINER_CHANNEL "$portainer_channel"
+  state_set PORTAINER_IMAGE "$portainer_image"
+  state_set PORTAINER_AGENT_IMAGE "$portainer_agent_image"
 
   local traefik_stack portainer_stack
   traefik_stack="$(stack_path traefik)"
@@ -43,7 +66,9 @@ Email SSL: $ssl_email"
 
   stack_render "$VPS_INSTALLER_SOURCE_DIR/templates/portainer.yml" "$portainer_stack" \
     NETWORK_NAME "$network_name" \
-    PORTAINER_DOMAIN "$portainer_domain"
+    PORTAINER_DOMAIN "$portainer_domain" \
+    PORTAINER_IMAGE "$portainer_image" \
+    PORTAINER_AGENT_IMAGE "$portainer_agent_image"
 
   ui_info "Instalando Traefik via docker stack deploy..."
   docker stack deploy --prune --resolve-image always -c "$traefik_stack" traefik
@@ -56,7 +81,9 @@ Email SSL: $ssl_email"
   recipe_base_init_portainer "$portainer_domain" "$portainer_user" "$portainer_password"
 
   state_register_app "traefik" "traefik" "base" "" "traefik:v3.4.0" "$traefik_stack"
-  state_register_app "portainer" "portainer" "base" "$portainer_domain" "portainer/portainer-ce:latest" "$portainer_stack"
+  state_register_app "portainer" "portainer" "base" "$portainer_domain" "$portainer_image" "$portainer_stack"
+  state_set PORTAINER_CHANNEL "$portainer_channel" "$APP_STATE_DIR/portainer.env"
+  state_set PORTAINER_AGENT_IMAGE "$portainer_agent_image" "$APP_STATE_DIR/portainer.env"
 
   ui_success "Base instalada."
   ui_warn "Confirme se o DNS do domínio aponta para esta VPS antes de depender do HTTPS."
@@ -69,7 +96,7 @@ recipe_base_init_portainer() {
   local password="$3"
   local api_url="http://127.0.0.1:9000"
 
-  ui_info "Inicializando usuario admin do Portainer..."
+  ui_info "Inicializando usuário admin do Portainer..."
   local attempt response
   for attempt in 1 2 3 4 5 6; do
     response="$(curl -sS -X POST "$api_url/api/users/admin/init" \
@@ -80,7 +107,7 @@ recipe_base_init_portainer() {
       break
     fi
     if printf '%s' "$response" | grep -qi 'already'; then
-      ui_warn "Portainer ja inicializado. Salvando credenciais informadas."
+      ui_warn "Portainer já inicializado. Salvando credenciais informadas."
       break
     fi
     sleep 5

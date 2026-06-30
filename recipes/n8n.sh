@@ -8,7 +8,7 @@ recipe_n8n_install() {
 
   recipe_postgres_ensure_default
 
-  local suffix stack_name editor_domain webhook_domain encryption_key redis_password stack_file network_name
+  local suffix stack_name editor_domain webhook_domain n8n_version n8n_image n8n_runners_image encryption_key runners_auth_token redis_password stack_file network_name
   suffix="$(ui_input "Sufixo opcional da stack, vazio para n8n" "")"
   if [[ -n "$suffix" ]]; then
     stack_name="n8n_$suffix"
@@ -20,6 +20,9 @@ recipe_n8n_install() {
     fail "Stack ja existe: $stack_name"
   fi
 
+  n8n_version="$(ui_input "Versão testada do n8n" "2.11.3")"
+  n8n_image="n8nio/n8n:$n8n_version"
+  n8n_runners_image="n8nio/runners:$n8n_version"
   editor_domain="$(ui_input "Domínio do editor n8n, ex: n8n.seudomínio.com.br" "")"
   webhook_domain="$(ui_input "Domínio dos webhooks n8n, ex: webhook.seudomínio.com.br" "$editor_domain")"
   [[ -n "$editor_domain" && -n "$webhook_domain" ]] || fail "Domínios obrigatórios."
@@ -34,6 +37,7 @@ recipe_n8n_install() {
   recipe_postgres_create_database "$database"
 
   encryption_key="$(state_random_hex 16)"
+  runners_auth_token="$(state_random_hex 32)"
   redis_password="$(state_random_hex 16)"
   stack_file="$(stack_path "$stack_name")"
   network_name="$(state_get NETWORK_NAME)"
@@ -43,6 +47,9 @@ recipe_n8n_install() {
     NETWORK_NAME "$network_name" \
     EDITOR_DOMAIN "$editor_domain" \
     WEBHOOK_DOMAIN "$webhook_domain" \
+    N8N_IMAGE "$n8n_image" \
+    N8N_RUNNERS_IMAGE "$n8n_runners_image" \
+    N8N_RUNNERS_AUTH_TOKEN "$runners_auth_token" \
     POSTGRES_HOST "$pg_host" \
     POSTGRES_PASSWORD "$pg_pass" \
     POSTGRES_DATABASE "$database" \
@@ -50,14 +57,19 @@ recipe_n8n_install() {
     REDIS_PASSWORD "$redis_password"
 
   portainer_deploy_stack "$stack_name" "$stack_file"
-  state_register_app "$stack_name" "$stack_name" "n8n" "$editor_domain" "n8nio/n8n:latest" "$stack_file"
+  state_register_app "$stack_name" "$stack_name" "n8n" "$editor_domain" "$n8n_image" "$stack_file"
   state_set WEBHOOK_DOMAIN "$webhook_domain" "$APP_STATE_DIR/${stack_name}.env"
+  state_set N8N_VERSION "$n8n_version" "$APP_STATE_DIR/${stack_name}.env"
+  state_set N8N_IMAGE "$n8n_image" "$APP_STATE_DIR/${stack_name}.env"
+  state_set N8N_RUNNERS_IMAGE "$n8n_runners_image" "$APP_STATE_DIR/${stack_name}.env"
   state_set N8N_ENCRYPTION_KEY "$encryption_key" "$APP_STATE_DIR/${stack_name}.env"
+  state_set N8N_RUNNERS_AUTH_TOKEN "$runners_auth_token" "$APP_STATE_DIR/${stack_name}.env"
   state_set POSTGRES_DATABASE "$database" "$APP_STATE_DIR/${stack_name}.env"
   state_set REDIS_PASSWORD "$redis_password" "$APP_STATE_DIR/${stack_name}.env"
 
   ui_success "n8n instalado."
   echo "Editor: https://$editor_domain"
   echo "Webhook: https://$webhook_domain"
+  echo "Runners: habilitado ($n8n_runners_image)"
   ui_pause
 }

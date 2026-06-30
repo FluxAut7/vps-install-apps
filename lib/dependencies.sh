@@ -16,7 +16,8 @@ Dependências:
 - Base da VPS instalada: Docker, Swarm, rede interna, Traefik e Portainer
 - Portainer API configurada
 - PostgreSQL padrão: instalado automaticamente se ainda não existir
-- Redis: incluido dentro da propria stack do n8n
+- Redis: incluído dentro da própria stack do n8n
+- n8n runners: incluído como serviço obrigatório na stack do n8n
 EOF
       ;;
     evolution-api)

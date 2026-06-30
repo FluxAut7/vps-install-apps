@@ -36,7 +36,7 @@ VPS_INSTALLER_ARCHIVE_URL="https://github.com/FluxAut7/vps-install-apps/archive/
 - Portainer LTS/STS
 - PostgreSQL
 - Redis
-- n8n
+- n8n com runners externos obrigatórios
 - Uptime Kuma v1/v2
 - Evolution API
 

@@ -319,6 +319,9 @@ installer_import_existing_base_interactive() {
   local summary
   summary="Base existente detectada nesta VPS.
 
+Esta etapa importa a base para o inventário local.
+As credenciais do Portainer são opcionais neste momento e só serão necessárias para ações via API, como deploy, update, remoção e restore.
+
 Traefik: sim
 Portainer: sim
 Rede detectada: ${network_name:-não identificada}
@@ -337,10 +340,10 @@ Deseja importar essa base para o inventário do instalador?"
   state_set FIRST_ACCESS_BASE_IMPORT_CHECKED 1
   ui_success "Base importada para o inventário local."
 
-  if ui_confirm "Deseja vincular agora as credenciais do Portainer ao instalador?"; then
+  if ui_confirm "Deseja vincular agora as credenciais do Portainer ao instalador para liberar ações via API?"; then
     installer_bind_existing_portainer_credentials
   else
-    ui_warn "O Portainer foi importado para o inventário, mas ainda sem credenciais vinculadas."
+    ui_warn "O Portainer foi importado para o inventário. O vínculo de credenciais ficou pendente e pode ser feito depois no menu Portainer."
   fi
 
   ui_pause
@@ -895,7 +898,7 @@ vps_menu() {
       "2" "Painel detalhado||Mostra Docker, stacks e ferramentas instaladas." \
       "3" "Atualizar pacotes do sistema||Executa apt-get update e apt-get upgrade -y." \
       "4" "Backup / Migração||Exporta, valida e importa o estado da VPS." \
-      "5" "Importar base existente||Detecta Traefik e Portainer já instalados e cria o vínculo com o inventário." \
+      "5" "Importar base existente||Detecta Traefik e Portainer já instalados e registra a base no inventário. O vínculo de credenciais do Portainer é opcional nesta etapa." \
       "0" "Voltar||Retorna ao menu principal.")"
 
     case "$choice" in
@@ -913,7 +916,7 @@ tools_menu() {
   while true; do
     local choice
     choice="$(installer_menu_with_summary "Ferramentas" \
-      "1" "Importar stack existente||Detecta credenciais, senhas e chaves antes de confirmar a adoção." \
+      "1" "Importar stack existente||Detecta credenciais, senhas e chaves visíveis na stack antes de confirmar a adoção. Não exige login no Portainer." \
       "2" "Instalar PostgreSQL||Cria a stack do banco com volume persistente." \
       "3" "Instalar Redis||Cria a stack do cache e fila com persistência." \
       "4" "Instalar n8n||Publica editor, webhook, worker e runners externos." \
@@ -960,7 +963,7 @@ main_menu() {
       choice="$(installer_menu_with_summary "Menu principal" \
         "1" "VPS||Base da VPS, painel detalhado, pacotes e backup." \
         "2" "Ferramentas||Instalação, atualização e remoção de stacks." \
-        "3" "Portainer||Credenciais e operações ligadas ao Portainer." \
+        "3" "Portainer||Credenciais e operações que dependem da API do Portainer." \
         "0" "Sair||Encerra o instalador.")"
     else
       choice="$(installer_menu_with_summary "Menu principal" \

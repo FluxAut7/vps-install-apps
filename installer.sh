@@ -363,6 +363,347 @@ installer_first_access_existing_base_flow() {
   state_set FIRST_ACCESS_BASE_IMPORT_CHECKED 1
 }
 
+installer_untracked_stack_names() {
+  command -v docker >/dev/null 2>&1 || return 0
+  local inventory_file live_file diff_file
+  inventory_file="$(mktemp "$RUN_DIR/inventory-lines.XXXXXX")"
+  live_file="$(mktemp "$RUN_DIR/live-lines.XXXXXX")"
+  diff_file="$(mktemp "$RUN_DIR/untracked-lines.XXXXXX")"
+
+  installer_inventory_stack_names > "$inventory_file"
+  installer_live_stack_names | sort -u > "$live_file"
+  comm -23 "$live_file" "$inventory_file" > "$diff_file" || true
+  cat "$diff_file"
+  rm -f "$inventory_file" "$live_file" "$diff_file"
+}
+
+installer_service_env_lines() {
+  local service_name="$1"
+  docker service inspect "$service_name" --format '{{json .Spec.TaskTemplate.ContainerSpec.Env}}' 2>/dev/null | jq -r '.[]?'
+}
+
+installer_service_env_value() {
+  local service_name="$1"
+  local key="$2"
+  installer_service_env_lines "$service_name" | sed -n "s/^${key}=//p" | head -n 1
+}
+
+installer_stack_services_lines() {
+  local stack_name="$1"
+  docker stack services "$stack_name" --format '{{.Name}}' 2>/dev/null || true
+}
+
+installer_stack_first_service_by_image() {
+  local stack_name="$1"
+  local image_pattern="$2"
+  local service_name image
+  while read -r service_name; do
+    [[ -n "$service_name" ]] || continue
+    image="$(installer_service_image "$service_name")"
+    if [[ "$image" == *"$image_pattern"* ]]; then
+      printf '%s' "$service_name"
+      return 0
+    fi
+  done < <(installer_stack_services_lines "$stack_name")
+}
+
+installer_stack_service_name() {
+  local stack_name="$1"
+  local suffix="$2"
+  local service_name="${stack_name}_${suffix}"
+  if docker service inspect "$service_name" >/dev/null 2>&1; then
+    printf '%s' "$service_name"
+    return 0
+  fi
+  return 1
+}
+
+installer_service_short_name() {
+  local stack_name="$1"
+  local service_name="$2"
+  printf '%s' "${service_name#${stack_name}_}"
+}
+
+installer_service_router_domain() {
+  local service_name="$1"
+  local rule
+  rule="$(installer_service_labels_json "$service_name" | jq -r 'to_entries[]? | select(.key | test("^traefik\\.http\\.routers\\..*\\.rule$")) | .value' | head -n 1)"
+  [[ -n "$rule" ]] || return 0
+  installer_extract_host_from_rule "$rule"
+}
+
+installer_url_host() {
+  local url="$1"
+  printf '%s' "$url" | sed -E 's#^[a-zA-Z]+://([^/]+)/?.*$#\1#'
+}
+
+installer_secret_line() {
+  local label="$1"
+  local value="$2"
+  if [[ -n "$value" ]]; then
+    printf '%s: %s\n' "$label" "$value"
+  else
+    printf '%s: não detectada\n' "$label"
+  fi
+}
+
+installer_detect_supported_stack_type() {
+  local stack_name="$1"
+  local service_name image
+
+  if [[ "$stack_name" == "traefik" || "$stack_name" == "portainer" ]]; then
+    printf '%s' 'base'
+    return 0
+  fi
+
+  while read -r service_name; do
+    [[ -n "$service_name" ]] || continue
+    image="$(installer_service_image "$service_name")"
+    case "$image" in
+      *n8nio/n8n*|*n8nio/runners*) printf '%s' 'n8n'; return 0 ;;
+      *evoapicloud/evolution-api*) printf '%s' 'evolution-api'; return 0 ;;
+      *louislam/uptime-kuma*) printf '%s' 'uptime-kuma'; return 0 ;;
+    esac
+  done < <(installer_stack_services_lines "$stack_name")
+
+  service_name="$(installer_stack_first_service_by_image "$stack_name" 'postgres:')"
+  if [[ -n "$service_name" ]]; then
+    printf '%s' 'postgres'
+    return 0
+  fi
+
+  service_name="$(installer_stack_first_service_by_image "$stack_name" 'redis:')"
+  if [[ -n "$service_name" ]]; then
+    printf '%s' 'redis'
+    return 0
+  fi
+
+  printf ''
+}
+
+installer_import_existing_postgres_stack() {
+  local stack_name="$1"
+  local service_name image tag host password app_file summary
+  service_name="$(installer_stack_first_service_by_image "$stack_name" 'postgres:')"
+  [[ -n "$service_name" ]] || fail "Serviço PostgreSQL não encontrado na stack: $stack_name"
+  image="$(installer_service_image "$service_name")"
+  tag="${image##*:}"
+  host="$(installer_service_short_name "$stack_name" "$service_name")"
+  password="$(installer_service_env_value "$service_name" POSTGRES_PASSWORD)"
+
+  summary="Stack detectada: $stack_name
+Tipo: PostgreSQL
+Serviço: $service_name
+Imagem: ${image:-não identificada}
+Host interno: ${host:-não identificado}
+$(installer_secret_line 'POSTGRES_PASSWORD' "$password")
+Deseja importar esta stack para o inventário do instalador?"
+
+  ui_confirm_values "Importar stack existente" "$summary" || return 0
+
+  state_register_app "$stack_name" "$stack_name" "postgres" "" "$image" ""
+  app_file="$APP_STATE_DIR/${stack_name}.env"
+  state_set POSTGRES_TAG "$tag" "$app_file"
+  state_set POSTGRES_HOST "$host" "$app_file"
+  state_set POSTGRES_USER 'postgres' "$app_file"
+  [[ -n "$password" ]] && state_set POSTGRES_PASSWORD "$password" "$app_file"
+  if [[ -n "$password" ]]; then
+    state_set POSTGRES_URL "postgresql://postgres:$password@$host:5432/postgres" "$app_file"
+  fi
+  ui_success "Stack PostgreSQL importada: $stack_name"
+}
+
+installer_import_existing_redis_stack() {
+  local stack_name="$1"
+  local service_name image tag host password app_file summary
+  service_name="$(installer_stack_first_service_by_image "$stack_name" 'redis:')"
+  [[ -n "$service_name" ]] || fail "Serviço Redis não encontrado na stack: $stack_name"
+  image="$(installer_service_image "$service_name")"
+  tag="${image##*:}"
+  host="$(installer_service_short_name "$stack_name" "$service_name")"
+  password="$(installer_service_args_lines "$service_name" | sed -n 's/^--requirepass$//p')"
+  if [[ -z "$password" ]]; then
+    password="$(installer_service_args_lines "$service_name" | awk 'prev=="--requirepass" { print; exit } { prev=$0 }')"
+  fi
+
+  summary="Stack detectada: $stack_name
+Tipo: Redis
+Serviço: $service_name
+Imagem: ${image:-não identificada}
+Host interno: ${host:-não identificado}
+$(installer_secret_line 'REDIS_PASSWORD' "$password")
+Deseja importar esta stack para o inventário do instalador?"
+
+  ui_confirm_values "Importar stack existente" "$summary" || return 0
+
+  state_register_app "$stack_name" "$stack_name" "redis" "" "$image" ""
+  app_file="$APP_STATE_DIR/${stack_name}.env"
+  state_set REDIS_TAG "$tag" "$app_file"
+  state_set REDIS_HOST "$host" "$app_file"
+  [[ -n "$password" ]] && state_set REDIS_PASSWORD "$password" "$app_file"
+  if [[ -n "$password" ]]; then
+    state_set REDIS_URL "redis://:$password@$host:6379/0" "$app_file"
+  fi
+  ui_success "Stack Redis importada: $stack_name"
+}
+
+installer_import_existing_uptime_kuma_stack() {
+  local stack_name="$1"
+  local service_name image domain major app_file summary
+  service_name="$(installer_stack_first_service_by_image "$stack_name" 'louislam/uptime-kuma')"
+  [[ -n "$service_name" ]] || fail "Serviço Uptime Kuma não encontrado na stack: $stack_name"
+  image="$(installer_service_image "$service_name")"
+  domain="$(installer_service_router_domain "$service_name")"
+  major="${image##*:}"
+
+  summary="Stack detectada: $stack_name
+Tipo: Uptime Kuma
+Serviço: $service_name
+Imagem: ${image:-não identificada}
+Domínio: ${domain:-não detectado}
+Deseja importar esta stack para o inventário do instalador?"
+
+  ui_confirm_values "Importar stack existente" "$summary" || return 0
+
+  state_register_app "$stack_name" "$stack_name" "uptime-kuma" "$domain" "$image" ""
+  app_file="$APP_STATE_DIR/${stack_name}.env"
+  state_set UPTIME_KUMA_DOMAIN "$domain" "$app_file"
+  state_set UPTIME_KUMA_IMAGE "$image" "$app_file"
+  state_set UPTIME_KUMA_MAJOR_VERSION "$major" "$app_file"
+  ui_success "Stack Uptime Kuma importada: $stack_name"
+}
+
+installer_import_existing_n8n_stack() {
+  local stack_name="$1"
+  local editor_service webhook_service runners_service image runners_image editor_domain webhook_domain version database encryption_key runners_token redis_password app_file summary
+  editor_service="$(installer_stack_service_name "$stack_name" editor || true)"
+  webhook_service="$(installer_stack_service_name "$stack_name" webhook || true)"
+  runners_service="$(installer_stack_service_name "$stack_name" runners || true)"
+  [[ -n "$editor_service" ]] || editor_service="$(installer_stack_first_service_by_image "$stack_name" 'n8nio/n8n')"
+  [[ -n "$editor_service" ]] || fail "Serviço principal do n8n não encontrado na stack: $stack_name"
+
+  image="$(installer_service_image "$editor_service")"
+  runners_image="$(installer_service_image "$runners_service")"
+  version="${image##*:}"
+  editor_domain="$(installer_service_router_domain "$editor_service")"
+  [[ -n "$editor_domain" ]] || editor_domain="$(installer_service_env_value "$editor_service" N8N_HOST)"
+  webhook_domain="$(installer_service_router_domain "$webhook_service")"
+  if [[ -z "$webhook_domain" ]]; then
+    webhook_domain="$(installer_url_host "$(installer_service_env_value "$editor_service" WEBHOOK_URL)")"
+  fi
+  database="$(installer_service_env_value "$editor_service" DB_POSTGRESDB_DATABASE)"
+  encryption_key="$(installer_service_env_value "$editor_service" N8N_ENCRYPTION_KEY)"
+  runners_token="$(installer_service_env_value "$editor_service" N8N_RUNNERS_AUTH_TOKEN)"
+  [[ -n "$runners_token" ]] || runners_token="$(installer_service_env_value "$runners_service" N8N_RUNNERS_AUTH_TOKEN)"
+  redis_password="$(installer_service_env_value "$editor_service" QUEUE_BULL_REDIS_PASSWORD)"
+
+  summary="Stack detectada: $stack_name
+Tipo: n8n
+Serviço editor: ${editor_service:-não identificado}
+Imagem: ${image:-não identificada}
+Imagem runners: ${runners_image:-não identificada}
+Domínio editor: ${editor_domain:-não detectado}
+Domínio webhook: ${webhook_domain:-não detectado}
+Banco da fila: ${database:-não detectado}
+$(installer_secret_line 'N8N_ENCRYPTION_KEY' "$encryption_key")$(installer_secret_line 'N8N_RUNNERS_AUTH_TOKEN' "$runners_token")$(installer_secret_line 'REDIS_PASSWORD' "$redis_password")
+Deseja importar esta stack para o inventário do instalador?"
+
+  ui_confirm_values "Importar stack existente" "$summary" || return 0
+
+  state_register_app "$stack_name" "$stack_name" "n8n" "$editor_domain" "$image" ""
+  app_file="$APP_STATE_DIR/${stack_name}.env"
+  state_set WEBHOOK_DOMAIN "$webhook_domain" "$app_file"
+  state_set N8N_VERSION "$version" "$app_file"
+  state_set N8N_IMAGE "$image" "$app_file"
+  [[ -n "$runners_image" ]] && state_set N8N_RUNNERS_IMAGE "$runners_image" "$app_file"
+  [[ -n "$encryption_key" ]] && state_set N8N_ENCRYPTION_KEY "$encryption_key" "$app_file"
+  [[ -n "$runners_token" ]] && state_set N8N_RUNNERS_AUTH_TOKEN "$runners_token" "$app_file"
+  [[ -n "$database" ]] && state_set POSTGRES_DATABASE "$database" "$app_file"
+  [[ -n "$redis_password" ]] && state_set REDIS_PASSWORD "$redis_password" "$app_file"
+  ui_success "Stack n8n importada: $stack_name"
+}
+
+installer_import_existing_evolution_stack() {
+  local stack_name="$1"
+  local api_service image tag domain api_key database redis_password app_file db_uri redis_uri summary
+  api_service="$(installer_stack_service_name "$stack_name" api || true)"
+  [[ -n "$api_service" ]] || api_service="$(installer_stack_first_service_by_image "$stack_name" 'evoapicloud/evolution-api')"
+  [[ -n "$api_service" ]] || fail "Serviço Evolution API não encontrado na stack: $stack_name"
+
+  image="$(installer_service_image "$api_service")"
+  tag="${image##*:}"
+  domain="$(installer_service_router_domain "$api_service")"
+  [[ -n "$domain" ]] || domain="$(installer_url_host "$(installer_service_env_value "$api_service" SERVER_URL)")"
+  api_key="$(installer_service_env_value "$api_service" AUTHENTICATION_API_KEY)"
+  db_uri="$(installer_service_env_value "$api_service" DATABASE_CONNECTION_URI)"
+  database="$(printf '%s' "$db_uri" | sed -E 's#^.*/([^/?]+).*$#\1#')"
+  redis_uri="$(installer_service_env_value "$api_service" CACHE_REDIS_URI)"
+  redis_password="$(printf '%s' "$redis_uri" | sed -n -E 's#^redis://:([^@]+)@.*$#\1#p')"
+
+  summary="Stack detectada: $stack_name
+Tipo: Evolution API
+Serviço: ${api_service:-não identificado}
+Imagem: ${image:-não identificada}
+Domínio: ${domain:-não detectado}
+Banco: ${database:-não detectado}
+$(installer_secret_line 'EVOLUTION_API_KEY' "$api_key")$(installer_secret_line 'REDIS_PASSWORD' "$redis_password")
+Deseja importar esta stack para o inventário do instalador?"
+
+  ui_confirm_values "Importar stack existente" "$summary" || return 0
+
+  state_register_app "$stack_name" "$stack_name" "evolution-api" "$domain" "$image" ""
+  app_file="$APP_STATE_DIR/${stack_name}.env"
+  state_set EVOLUTION_TAG "$tag" "$app_file"
+  [[ -n "$api_key" ]] && state_set EVOLUTION_API_KEY "$api_key" "$app_file"
+  [[ -n "$database" ]] && state_set POSTGRES_DATABASE "$database" "$app_file"
+  [[ -n "$redis_password" ]] && state_set REDIS_PASSWORD "$redis_password" "$app_file"
+  ui_success "Stack Evolution API importada: $stack_name"
+}
+
+installer_import_existing_stack_interactive() {
+  state_init
+  command -v docker >/dev/null 2>&1 || fail "Docker não instalado nesta VPS."
+
+  local -a items=()
+  local stack_name stack_type desc
+  while read -r stack_name; do
+    [[ -n "$stack_name" ]] || continue
+    stack_type="$(installer_detect_supported_stack_type "$stack_name")"
+    case "$stack_type" in
+      postgres) desc="PostgreSQL||Importa a stack e tenta detectar senha do banco." ;;
+      redis) desc="Redis||Importa a stack e tenta detectar senha do Redis." ;;
+      n8n) desc="n8n||Importa a stack e tenta detectar chaves, token e senha do Redis interno." ;;
+      uptime-kuma) desc="Uptime Kuma||Importa a stack e registra domínio e versão." ;;
+      evolution-api) desc="Evolution API||Importa a stack e tenta detectar API key e senha do Redis." ;;
+      *) continue ;;
+    esac
+    items+=("$stack_name" "$desc")
+  done < <(installer_untracked_stack_names)
+
+  if [[ "${#items[@]}" -eq 0 ]]; then
+    installer_header
+    ui_warn "Nenhuma stack suportada fora do inventário foi encontrada para importação."
+    ui_pause
+    return 0
+  fi
+
+  local selected stack_type
+  selected="$(installer_menu_with_summary "Importar stack existente" "${items[@]}" "0" "Voltar||Retorna ao menu Ferramentas.")"
+  [[ -n "$selected" && "$selected" != "0" ]] || return 0
+
+  stack_type="$(installer_detect_supported_stack_type "$selected")"
+  case "$stack_type" in
+    postgres) installer_import_existing_postgres_stack "$selected" ;;
+    redis) installer_import_existing_redis_stack "$selected" ;;
+    n8n) installer_import_existing_n8n_stack "$selected" ;;
+    uptime-kuma) installer_import_existing_uptime_kuma_stack "$selected" ;;
+    evolution-api) installer_import_existing_evolution_stack "$selected" ;;
+    *) fail "Tipo de stack não suportado para importação: $selected" ;;
+  esac
+
+  ui_pause
+}
+
 installer_summary_text() {
   local so_line usage_line stacks_count inventory_count unmanaged_count
   so_line="${VPSI_OS_ID^} ${VPSI_OS_VERSION:-}"
@@ -572,23 +913,25 @@ tools_menu() {
   while true; do
     local choice
     choice="$(installer_menu_with_summary "Ferramentas" \
-      "1" "Instalar PostgreSQL||Cria a stack do banco com volume persistente." \
-      "2" "Instalar Redis||Cria a stack do cache e fila com persistência." \
-      "3" "Instalar n8n||Publica editor, webhook, worker e runners externos." \
-      "4" "Instalar Uptime Kuma||Publica monitoramento com escolha entre v1 e v2." \
-      "5" "Instalar Evolution API||Publica a API com Postgres e Redis internos." \
-      "6" "Atualizar ferramenta instalada||Reimplanta a stack e aplica a versão testada." \
-      "7" "Remover stack||Exclui uma stack pelo Portainer sem apagar volumes." \
+      "1" "Importar stack existente||Detecta credenciais, senhas e chaves antes de confirmar a adoção." \
+      "2" "Instalar PostgreSQL||Cria a stack do banco com volume persistente." \
+      "3" "Instalar Redis||Cria a stack do cache e fila com persistência." \
+      "4" "Instalar n8n||Publica editor, webhook, worker e runners externos." \
+      "5" "Instalar Uptime Kuma||Publica monitoramento com escolha entre v1 e v2." \
+      "6" "Instalar Evolution API||Publica a API com Postgres e Redis internos." \
+      "7" "Atualizar ferramenta instalada||Reimplanta a stack e aplica a versão testada." \
+      "8" "Remover stack||Exclui uma stack pelo Portainer sem apagar volumes." \
       "0" "Voltar||Retorna ao menu principal.")"
 
     case "$choice" in
-      1) recipe_postgres_install ;;
-      2) recipe_redis_install ;;
-      3) recipe_n8n_install ;;
-      4) recipe_uptime_kuma_install ;;
-      5) recipe_evolution_install ;;
-      6) recipe_update_installed_tool ;;
-      7) remove_stack_menu ;;
+      1) installer_import_existing_stack_interactive ;;
+      2) recipe_postgres_install ;;
+      3) recipe_redis_install ;;
+      4) recipe_n8n_install ;;
+      5) recipe_uptime_kuma_install ;;
+      6) recipe_evolution_install ;;
+      7) recipe_update_installed_tool ;;
+      8) remove_stack_menu ;;
       0|"") return 0 ;;
     esac
   done

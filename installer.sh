@@ -170,6 +170,199 @@ installer_has_portainer() {
   [[ -f "$APP_STATE_DIR/portainer.env" ]] || [[ -n "$(state_get PORTAINER_URL "$STATE_DIR/portainer.env" || true)" ]]
 }
 
+installer_stack_exists() {
+  local stack_name="$1"
+  installer_live_stack_names | grep -Fxq "$stack_name"
+}
+
+installer_extract_host_from_rule() {
+  local rule="$1"
+  printf '%s' "$rule" | awk -F'`' '/Host\(`/ { print $2; exit }'
+}
+
+installer_service_labels_json() {
+  local service_name="$1"
+  docker service inspect "$service_name" --format '{{json .Spec.Labels}}' 2>/dev/null || printf '{}'
+}
+
+installer_service_image() {
+  local service_name="$1"
+  docker service inspect "$service_name" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' 2>/dev/null | sed 's/@.*$//'
+}
+
+installer_service_args_lines() {
+  local service_name="$1"
+  docker service inspect "$service_name" --format '{{json .Spec.TaskTemplate.ContainerSpec.Args}}' 2>/dev/null \
+    | jq -r '.[]?'
+}
+
+installer_detect_existing_base() {
+  command -v docker >/dev/null 2>&1 || return 1
+  installer_stack_exists traefik || return 1
+  installer_stack_exists portainer || return 1
+  return 0
+}
+
+installer_detect_existing_network_name() {
+  local network_name
+  network_name="$(installer_service_labels_json portainer_portainer | jq -r '."traefik.docker.network" // empty')"
+  if [[ -n "$network_name" ]]; then
+    printf '%s' "$network_name"
+    return 0
+  fi
+
+  installer_service_args_lines traefik_traefik | sed -n 's/^--providers.swarm.network=//p' | head -n 1
+}
+
+installer_detect_existing_ssl_email() {
+  installer_service_args_lines traefik_traefik | sed -n 's/^--certificatesresolvers\.letsencryptresolver\.acme\.email=//p' | head -n 1
+}
+
+installer_detect_existing_portainer_domain() {
+  local rule
+  rule="$(installer_service_labels_json portainer_portainer | jq -r '."traefik.http.routers.portainer.rule" // empty')"
+  [[ -n "$rule" ]] || return 0
+  installer_extract_host_from_rule "$rule"
+}
+
+installer_detect_existing_portainer_channel() {
+  local image tag
+  image="$(installer_service_image portainer_portainer)"
+  tag="${image##*:}"
+  case "$tag" in
+    lts|sts) printf '%s' "$tag" ;;
+    *) printf '' ;;
+  esac
+}
+
+installer_import_existing_base() {
+  local network_name ssl_email portainer_domain portainer_channel traefik_image portainer_image portainer_agent_image
+  network_name="$(installer_detect_existing_network_name)"
+  ssl_email="$(installer_detect_existing_ssl_email)"
+  portainer_domain="$(installer_detect_existing_portainer_domain)"
+  portainer_channel="$(installer_detect_existing_portainer_channel)"
+  traefik_image="$(installer_service_image traefik_traefik)"
+  portainer_image="$(installer_service_image portainer_portainer)"
+  portainer_agent_image="$(installer_service_image portainer_agent)"
+
+  [[ -n "$network_name" ]] && state_set NETWORK_NAME "$network_name"
+  [[ -n "$ssl_email" ]] && state_set SSL_EMAIL "$ssl_email"
+  [[ -n "$portainer_domain" ]] && state_set PORTAINER_DOMAIN "$portainer_domain"
+  [[ -n "$portainer_channel" ]] && state_set PORTAINER_CHANNEL "$portainer_channel"
+  [[ -n "$traefik_image" ]] && state_set TRAEFIK_IMAGE "$traefik_image"
+  [[ -n "$portainer_image" ]] && state_set PORTAINER_IMAGE "$portainer_image"
+  [[ -n "$portainer_agent_image" ]] && state_set PORTAINER_AGENT_IMAGE "$portainer_agent_image"
+
+  state_register_app "traefik" "traefik" "base" "" "$traefik_image" ""
+  [[ -n "$traefik_image" ]] && state_set TRAEFIK_IMAGE "$traefik_image" "$APP_STATE_DIR/traefik.env"
+
+  state_register_app "portainer" "portainer" "base" "$portainer_domain" "$portainer_image" ""
+  [[ -n "$portainer_channel" ]] && state_set PORTAINER_CHANNEL "$portainer_channel" "$APP_STATE_DIR/portainer.env"
+  [[ -n "$portainer_agent_image" ]] && state_set PORTAINER_AGENT_IMAGE "$portainer_agent_image" "$APP_STATE_DIR/portainer.env"
+}
+
+installer_bind_existing_portainer_credentials() {
+  local detected_url default_url url user pass
+  detected_url="$(state_get PORTAINER_URL "$STATE_DIR/portainer.env" || true)"
+  if [[ -z "$detected_url" ]]; then
+    local detected_domain
+    detected_domain="$(state_get PORTAINER_DOMAIN "$STATE_DIR/config.env" || true)"
+    if [[ -n "$detected_domain" ]]; then
+      detected_url="https://$detected_domain"
+    else
+      detected_url="http://127.0.0.1:9000"
+    fi
+  fi
+
+  default_url="$detected_url"
+  url="$(ui_input "URL do Portainer" "$default_url")"
+  user="$(ui_input "Usuário do Portainer" "$(state_get PORTAINER_USER "$STATE_DIR/portainer.env" || true)")"
+  pass="$(ui_password "Senha do Portainer")"
+  [[ -n "$url" && -n "$user" && -n "$pass" ]] || {
+    ui_warn "Vínculo com o Portainer ignorado por credenciais incompletas."
+    return 0
+  }
+
+  state_set PORTAINER_URL "$url" "$STATE_DIR/portainer.env"
+  state_set PORTAINER_API_URL "http://127.0.0.1:9000" "$STATE_DIR/portainer.env"
+  state_set PORTAINER_USER "$user" "$STATE_DIR/portainer.env"
+  state_set PORTAINER_PASSWORD "$pass" "$STATE_DIR/portainer.env"
+  chmod 600 "$STATE_DIR/portainer.env"
+
+  if portainer_login >/dev/null 2>&1; then
+    ui_success "Portainer vinculado ao instalador."
+    return 0
+  fi
+
+  ui_warn "Falha ao autenticar via API local. Tentando URL detectada..."
+  state_set PORTAINER_API_URL "$url" "$STATE_DIR/portainer.env"
+  portainer_login >/dev/null
+  ui_success "Portainer vinculado ao instalador."
+}
+
+installer_import_existing_base_interactive() {
+  state_init
+  installer_detect_existing_base || {
+    ui_warn "Nenhuma base existente com Traefik e Portainer foi detectada nesta VPS."
+    ui_pause
+    return 0
+  }
+
+  local network_name ssl_email portainer_domain portainer_channel traefik_image portainer_image
+  network_name="$(installer_detect_existing_network_name)"
+  ssl_email="$(installer_detect_existing_ssl_email)"
+  portainer_domain="$(installer_detect_existing_portainer_domain)"
+  portainer_channel="$(installer_detect_existing_portainer_channel)"
+  traefik_image="$(installer_service_image traefik_traefik)"
+  portainer_image="$(installer_service_image portainer_portainer)"
+
+  local summary
+  summary="Base existente detectada nesta VPS.
+
+Traefik: sim
+Portainer: sim
+Rede detectada: ${network_name:-não identificada}
+Email SSL: ${ssl_email:-não identificado}
+Domínio do Portainer: ${portainer_domain:-não identificado}
+Canal do Portainer: ${portainer_channel:-não identificado}
+Imagem Traefik: ${traefik_image:-não identificada}
+Imagem Portainer: ${portainer_image:-não identificada}
+
+Deseja importar essa base para o inventário do instalador?"
+
+  installer_header
+  ui_confirm_values "Importar base existente" "$summary" || return 0
+
+  installer_import_existing_base
+  state_set FIRST_ACCESS_BASE_IMPORT_CHECKED 1
+  ui_success "Base importada para o inventário local."
+
+  if ui_confirm "Deseja vincular agora as credenciais do Portainer ao instalador?"; then
+    installer_bind_existing_portainer_credentials
+  else
+    ui_warn "O Portainer foi importado para o inventário, mas ainda sem credenciais vinculadas."
+  fi
+
+  ui_pause
+}
+
+installer_first_access_existing_base_flow() {
+  [[ "$(state_get FIRST_ACCESS_BASE_IMPORT_CHECKED "$STATE_DIR/config.env" || true)" == "1" ]] && return 0
+
+  if [[ "$(installer_inventory_count)" -gt 0 ]]; then
+    state_set FIRST_ACCESS_BASE_IMPORT_CHECKED 1
+    return 0
+  fi
+
+  if ! installer_detect_existing_base; then
+    state_set FIRST_ACCESS_BASE_IMPORT_CHECKED 1
+    return 0
+  fi
+
+  installer_import_existing_base_interactive
+  state_set FIRST_ACCESS_BASE_IMPORT_CHECKED 1
+}
+
 installer_summary_text() {
   local so_line usage_line stacks_count inventory_count unmanaged_count
   so_line="${VPSI_OS_ID^} ${VPSI_OS_VERSION:-}"
@@ -361,6 +554,7 @@ vps_menu() {
       "2" "Painel detalhado||Mostra Docker, stacks e ferramentas instaladas." \
       "3" "Atualizar pacotes do sistema||Executa apt-get update e apt-get upgrade -y." \
       "4" "Backup / Migração||Exporta, valida e importa o estado da VPS." \
+      "5" "Importar base existente||Detecta Traefik e Portainer já instalados e cria o vínculo com o inventário." \
       "0" "Voltar||Retorna ao menu principal.")"
 
     case "$choice" in
@@ -368,6 +562,7 @@ vps_menu() {
       2) show_status ;;
       3) system_upgrade_packages_interactive ;;
       4) backup_menu ;;
+      5) installer_import_existing_base_interactive ;;
       0|"") return 0 ;;
     esac
   done
@@ -449,6 +644,7 @@ main() {
   system_detect_os
   state_init
   system_install_base_packages
+  installer_first_access_existing_base_flow
   main_menu
 }
 

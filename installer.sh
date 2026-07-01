@@ -34,30 +34,31 @@ export VPS_INSTALLER_SOURCE_DIR="$SCRIPT_DIR"
 
 installer_header() {
   ui_clear
-  ui_title "VPS Installer"
-  echo "Instalador interativo para Docker Swarm, Traefik, Portainer e apps de automação."
+  ui_title "VPS Installer" "Docker Swarm • Traefik • Portainer • Apps open source"
+  ui_hint "Fluxo guiado para preparar a VPS, instalar ferramentas e manter o inventário local."
   echo
 }
 
 show_status() {
   installer_header
   state_init
-  echo "Diretório: $VPSI_HOME"
+  ui_section "Ambiente"
+  ui_kv "Diretório" "$VPSI_HOME"
   echo
 
   if command -v docker >/dev/null 2>&1; then
-    echo "Docker:"
+    ui_section "Docker"
     docker --version || true
     docker info --format 'Swarm: {{.Swarm.LocalNodeState}}' 2>/dev/null || true
     echo
-    echo "Stacks:"
+    ui_section "Stacks"
     docker stack ls 2>/dev/null || true
   else
-    echo "Docker não instalado."
+    ui_warn "Docker não instalado."
   fi
 
   echo
-  echo "Apps registrados:"
+  ui_section "Apps registrados"
   state_list_apps || true
   ui_pause
 }

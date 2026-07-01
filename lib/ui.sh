@@ -4,11 +4,47 @@ ui_clear() {
   clear 2>/dev/null || true
 }
 
+ui_term_width() {
+  local width
+  width="$(tput cols 2>/dev/null || printf '80')"
+  if [[ -z "$width" || "$width" -lt 64 ]]; then
+    width=64
+  fi
+  printf '%s' "$width"
+}
+
+ui_repeat() {
+  local char="$1"
+  local count="$2"
+  local out=""
+  local i
+  for ((i=0; i<count; i++)); do
+    out+="$char"
+  done
+  printf '%s' "$out"
+}
+
+ui_rule() {
+  local width
+  width="$(ui_term_width)"
+  ui_repeat "─" "$width"
+}
+
 ui_title() {
   local title="$1"
-  printf '\033[1;33m============================================================\033[0m\n' >&2
+  local subtitle="${2:-}"
+
+  printf '\033[38;5;214m%s\033[0m\n' "$(ui_rule)" >&2
   printf '\033[1;97m%s\033[0m\n' "$title" >&2
-  printf '\033[1;33m============================================================\033[0m\n' >&2
+  if [[ -n "$subtitle" ]]; then
+    printf '\033[38;5;250m%s\033[0m\n' "$subtitle" >&2
+  fi
+  printf '\033[38;5;214m%s\033[0m\n' "$(ui_rule)" >&2
+}
+
+ui_section() {
+  local title="$1"
+  printf '\n\033[1;96m%s\033[0m\n' "$title" >&2
 }
 
 ui_info() {
@@ -27,6 +63,22 @@ ui_error() {
   printf '\033[1;31m[ERRO]\033[0m %s\n' "$*" >&2
 }
 
+ui_kv() {
+  local key="$1"
+  local value="$2"
+  printf '  \033[38;5;214m%-18s\033[0m %s\n' "$key" "$value" >&2
+}
+
+ui_list_item() {
+  local key="$1"
+  local value="$2"
+  printf '  \033[1;93m[%s]\033[0m %s\n' "$key" "$value" >&2
+}
+
+ui_hint() {
+  printf '\033[38;5;244m%s\033[0m\n' "$*" >&2
+}
+
 fail() {
   ui_error "$*"
   exit 1
@@ -34,7 +86,7 @@ fail() {
 
 ui_pause() {
   echo >&2
-  printf 'Pressione Enter para continuar...' >&2
+  printf '\033[38;5;244mPressione Enter para continuar...\033[0m' >&2
   read -r _
 }
 
@@ -48,20 +100,22 @@ ui_menu() {
 
   if ui_has_dialog; then
     local result
-    result="$(dialog --clear --stdout --title "$title" --menu "Escolha uma opção:" 22 78 14 "$@")" || true
+    result="$(dialog --clear --stdout --title "$title" --menu "Escolha uma opção:" 22 90 14 "$@")" || true
     printf '%s' "$result"
     return 0
   fi
 
-  printf '%s\n\n' "$title" >&2
+  ui_section "$title"
   local args=("$@")
   local i
   for ((i=0; i<${#args[@]}; i+=2)); do
-    printf '  [%s] %s\n' "${args[$i]}" "${args[$((i+1))]}" >&2
+    ui_list_item "${args[$i]}" "${args[$((i+1))]}"
   done
   echo >&2
+  ui_hint "Digite a opção e pressione Enter."
+
   local choice
-  printf 'Opção: ' >&2
+  printf '\033[1;97mOpção:\033[0m ' >&2
   read -r choice
   printf '%s' "$choice"
 }
@@ -71,17 +125,17 @@ ui_input() {
   local default="${2:-}"
 
   if ui_has_dialog; then
-    dialog --clear --stdout --inputbox "$prompt" 10 78 "$default" || true
+    dialog --clear --stdout --inputbox "$prompt" 10 90 "$default" || true
     return 0
   fi
 
   local value
   if [[ -n "$default" ]]; then
-    printf '%s [%s]: ' "$prompt" "$default" >&2
+    printf '\033[1;97m%s\033[0m \033[38;5;244m[%s]\033[0m: ' "$prompt" "$default" >&2
     read -r value
     printf '%s' "${value:-$default}"
   else
-    printf '%s: ' "$prompt" >&2
+    printf '\033[1;97m%s\033[0m: ' "$prompt" >&2
     read -r value
     printf '%s' "$value"
   fi
@@ -91,12 +145,12 @@ ui_password() {
   local prompt="$1"
 
   if ui_has_dialog; then
-    dialog --clear --stdout --passwordbox "$prompt" 10 78 || true
+    dialog --clear --stdout --passwordbox "$prompt" 10 90 || true
     return 0
   fi
 
   local value
-  printf '%s: ' "$prompt" >&2
+  printf '\033[1;97m%s\033[0m: ' "$prompt" >&2
   read -r -s value
   echo >&2
   printf '%s' "$value"
@@ -106,12 +160,12 @@ ui_confirm() {
   local prompt="$1"
 
   if ui_has_dialog; then
-    dialog --clear --yesno "$prompt" 10 78
+    dialog --clear --yesno "$prompt" 10 90
     return $?
   fi
 
   local answer
-  printf '%s (S/N): ' "$prompt" >&2
+  printf '\033[1;97m%s\033[0m \033[38;5;244m(S/N)\033[0m: ' "$prompt" >&2
   read -r answer
   [[ "$answer" =~ ^[SsYy]$ ]]
 }
@@ -121,11 +175,11 @@ ui_confirm_values() {
   local body="$2"
 
   if ui_has_dialog; then
-    dialog --clear --yesno "$body" 18 78
+    dialog --clear --yesno "$body" 18 90
     return $?
   fi
 
-  ui_title "$title"
+  ui_section "$title"
   printf '%s\n' "$body" >&2
   echo >&2
   ui_confirm "As informações estão corretas?"

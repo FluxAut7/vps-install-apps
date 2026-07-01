@@ -181,15 +181,15 @@ system_collect_stack_usage() {
   ps_file="$(mktemp "$RUN_DIR/stack-ps.XXXXXX")"
   stats_file="$(mktemp "$RUN_DIR/stack-stats.XXXXXX")"
 
-  docker ps --format '{{.ID}}	{{.Label "com.docker.stack.namespace"}}' > "$ps_file"
+  docker ps --format '{{.ID}}|{{.Label "com.docker.stack.namespace"}}' > "$ps_file"
   if [[ ! -s "$ps_file" ]]; then
     rm -f "$ps_file" "$stats_file"
     return 0
   fi
 
-  docker stats --no-stream --format '{{.ID}}	{{.CPUPerc}}	{{.MemUsage}}' > "$stats_file"
+  docker stats --no-stream --format '{{.ID}}|{{.CPUPerc}}|{{.MemUsage}}' > "$stats_file"
 
-  awk -F '\t' '
+  awk -F '|' '
     function mem_to_mib(text, parts, raw) {
       gsub(/ /, "", text)
       split(text, parts, "/")

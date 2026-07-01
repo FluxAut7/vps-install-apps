@@ -191,6 +191,48 @@ ui_menu() {
   printf '%s' "$choice"
 }
 
+ui_menu_with_text() {
+  local title="$1"
+  local body="$2"
+  shift 2
+
+  if ui_has_dialog; then
+    local dialog_args=()
+    local args=("$@")
+    local i split label desc
+    for ((i=0; i<${#args[@]}; i+=2)); do
+      split="$(ui_split_menu_label "${args[$((i+1))]}")"
+      label="${split%%$'\n'*}"
+      desc="${split#*$'\n'}"
+      dialog_args+=("${args[$i]}" "$label" "$desc")
+    done
+
+    local size height width result
+    size="$(ui_dialog_size)"
+    height="${size%%$'\t'*}"
+    width="${size#*$'\t'}"
+
+    result="$(dialog --clear --stdout --item-help --title "$title" --menu "$body" "$height" "$width" 14 "${dialog_args[@]}")" || true
+    printf '%s' "$result"
+    return 0
+  fi
+
+  ui_section "$title"
+  printf '%s\n\n' "$body" >&2
+  local args=("$@")
+  local i
+  for ((i=0; i<${#args[@]}; i+=2)); do
+    ui_list_item "${args[$i]}" "${args[$((i+1))]}"
+  done
+  echo >&2
+  ui_hint "Digite a opção e pressione Enter."
+
+  local choice
+  printf '\033[1;97mOpção:\033[0m ' >&2
+  read -r choice
+  printf '%s' "$choice"
+}
+
 ui_input() {
   local prompt="$1"
   local default="${2:-}"

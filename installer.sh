@@ -109,67 +109,23 @@ installer_live_stack_names() {
 
 installer_inventory_stack_names() {
   [[ -s "$STATE_DIR/apps.tsv" ]] || return 0
-  awk -F '\t' '{ print $2 }' "$STATE_DIR/apps.tsv" | sort -u
+  awk -F '\t' '{ print $2 }' "$STATE_DIR/apps.tsv" | awk 'NF' | sort -u
 }
 
 installer_join_lines() {
   awk 'NF { out = out (out ? ", " : "") $0 } END { print out }'
 }
 
-installer_dashboard_text() {
-  state_init
+installer_count_lines() {
+  awk 'NF { count++ } END { print count + 0 }'
+}
 
-  local text line extra_stacks usage_file
-  text="Resumo da VPS\n"
-  text+="SO: ${VPSI_OS_ID:-desconhecido} ${VPSI_OS_VERSION:-}\n"
+installer_live_stack_count() {
+  installer_live_stack_names | installer_count_lines
+}
 
-  if command -v docker >/dev/null 2>&1; then
-    line="$(installer_live_stack_names | installer_join_lines)"
-    [[ -n "$line" ]] || line="nenhuma stack detectada"
-    text+="Uso atual: $(system_vps_usage_line)\n"
-    text+="Swarm: $(docker info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null || printf 'indisponível')\n"
-    text+="Stacks Docker: $line\n"
-  else
-    text+="Docker: não instalado\n"
-  fi
-
-  extra_stacks="$(installer_untracked_stack_line || true)"
-  if [[ -n "$extra_stacks" ]]; then
-    text+="Stacks fora do inventário: $extra_stacks\n"
-  fi
-
-  text+="\nFerramentas instaladas\n"
-  if [[ ! -s "$STATE_DIR/apps.tsv" ]]; then
-    text+="- Nenhuma ferramenta registrada pelo instalador.\n"
-    printf '%b' "$text"
-    return 0
-  fi
-
-  usage_file=""
-  if command -v docker >/dev/null 2>&1; then
-    usage_file="$(mktemp "$RUN_DIR/usage-report.XXXXXX")"
-    system_collect_stack_usage > "$usage_file" 2>/dev/null || true
-  fi
-
-  local app_name stack_name app_type domain app_file label version usage details
-  while IFS=$'\t' read -r app_name stack_name app_type domain; do
-    [[ -n "$app_name" ]] || continue
-    app_file="$APP_STATE_DIR/${app_name}.env"
-    label="$(installer_tool_label "$app_name" "$app_type")"
-    version="$(installer_tool_version "$app_file" "$app_name" "$app_type")"
-    usage="$(installer_stack_usage_text "$usage_file" "$stack_name")"
-    details="stack=$stack_name"
-    if [[ -n "$version" ]]; then
-      details+=" | versão=$version"
-    fi
-    if [[ -n "$domain" ]]; then
-      details+=" | domínio=$domain"
-    fi
-    text+="- $label: $usage\n  $details\n"
-  done < "$STATE_DIR/apps.tsv"
-
-  [[ -n "$usage_file" ]] && rm -f "$usage_file"
-  printf '%b' "$text"
+installer_inventory_count() {
+  installer_inventory_stack_names | installer_count_lines
 }
 
 installer_untracked_stack_line() {
@@ -190,22 +146,102 @@ installer_untracked_stack_line() {
   rm -f "$inventory_file" "$live_file" "$diff_file"
 }
 
-installer_show_dashboard() {
-  state_init
-  ui_section "Resumo da VPS"
-  ui_kv "SO" "${VPSI_OS_ID:-desconhecido} ${VPSI_OS_VERSION:-}"
+installer_untracked_stack_count() {
+  command -v docker >/dev/null 2>&1 || {
+    printf '0'
+    return 0
+  }
+
+  local inventory_file live_file diff_file count
+  inventory_file="$(mktemp "$RUN_DIR/inventory-count.XXXXXX")"
+  live_file="$(mktemp "$RUN_DIR/live-count.XXXXXX")"
+  diff_file="$(mktemp "$RUN_DIR/untracked-count.XXXXXX")"
+
+  installer_inventory_stack_names > "$inventory_file"
+  installer_live_stack_names | sort -u > "$live_file"
+  comm -23 "$live_file" "$inventory_file" > "$diff_file" || true
+  count="$(installer_count_lines < "$diff_file")"
+
+  rm -f "$inventory_file" "$live_file" "$diff_file"
+  printf '%s' "$count"
+}
+
+installer_has_portainer() {
+  [[ -f "$APP_STATE_DIR/portainer.env" ]] || [[ -n "$(state_get PORTAINER_URL "$STATE_DIR/portainer.env" || true)" ]]
+}
+
+installer_summary_text() {
+  local so_line usage_line stacks_count inventory_count unmanaged_count
+  so_line="${VPSI_OS_ID^} ${VPSI_OS_VERSION:-}"
+
   if command -v docker >/dev/null 2>&1; then
-    ui_kv "Uso atual" "$(system_vps_usage_line)"
-    ui_kv "Swarm" "$(docker info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null || printf 'indisponível')"
-    ui_kv "Stacks Docker" "$(installer_live_stack_names | installer_join_lines)"
+    usage_line="$(system_vps_usage_line)"
+    stacks_count="$(installer_live_stack_count)"
+    unmanaged_count="$(installer_untracked_stack_count)"
   else
-    ui_kv "Docker" "não instalado"
+    usage_line="indisponível sem Docker"
+    stacks_count="0"
+    unmanaged_count="0"
   fi
 
-  local extra_stacks
-  extra_stacks="$(installer_untracked_stack_line || true)"
-  if [[ -n "$extra_stacks" ]]; then
-    ui_warn "Stacks detectadas fora do inventário local: $extra_stacks"
+  inventory_count="$(installer_inventory_count)"
+
+  cat <<EOF
+SO: $so_line
+Uso: $usage_line
+Stacks: $stacks_count
+Inventário local: $inventory_count
+Não gerenciadas: $unmanaged_count
+EOF
+}
+
+installer_show_summary() {
+  ui_section "Resumo da VPS"
+  ui_kv "SO" "${VPSI_OS_ID^} ${VPSI_OS_VERSION:-}"
+  if command -v docker >/dev/null 2>&1; then
+    ui_kv "Uso" "$(system_vps_usage_line)"
+    ui_kv "Stacks" "$(installer_live_stack_count)"
+    ui_kv "Inventário local" "$(installer_inventory_count)"
+    ui_kv "Não gerenciadas" "$(installer_untracked_stack_count)"
+  else
+    ui_kv "Uso" "indisponível sem Docker"
+    ui_kv "Stacks" "0"
+    ui_kv "Inventário local" "$(installer_inventory_count)"
+    ui_kv "Não gerenciadas" "0"
+  fi
+}
+
+installer_menu_with_summary() {
+  local title="$1"
+  shift
+
+  if ui_has_dialog; then
+    ui_menu_with_text "$title" "$(installer_summary_text)" "$@"
+    return 0
+  fi
+
+  installer_header
+  installer_show_summary
+  echo
+  ui_menu "$title" "$@"
+}
+
+installer_show_dashboard() {
+  state_init
+  installer_show_summary
+
+  echo
+  ui_section "Stacks do Docker"
+  if command -v docker >/dev/null 2>&1; then
+    local live_stacks extra_stacks
+    live_stacks="$(installer_live_stack_names | installer_join_lines)"
+    extra_stacks="$(installer_untracked_stack_line || true)"
+    ui_kv "Detectadas" "${live_stacks:-nenhuma stack detectada}"
+    if [[ -n "$extra_stacks" ]]; then
+      ui_kv "Fora do inventário" "$extra_stacks"
+    fi
+  else
+    ui_hint "Docker não instalado."
   fi
 
   echo
@@ -253,7 +289,7 @@ show_status() {
     docker --version || true
     docker info --format 'Swarm: {{.Swarm.LocalNodeState}}' 2>/dev/null || true
     echo
-    ui_section "Stacks do Docker"
+    ui_section "Tabela de stacks"
     docker stack ls 2>/dev/null || true
   else
     ui_warn "Docker não instalado."
@@ -299,14 +335,13 @@ portainer_reset_credentials() {
 
 backup_menu() {
   while true; do
-    installer_header
     local choice
-    choice="$(ui_menu "Backup / Migração" \
+    choice="$(installer_menu_with_summary "Backup / Migração" \
       "1" "Exportar configurações e credenciais||Gera um backup criptografado do estado local." \
       "2" "Importar backup nesta VPS||Restaura stacks e credenciais a partir de um arquivo .enc." \
       "3" "Listar backups locais||Mostra os arquivos de backup disponíveis no servidor." \
       "4" "Validar backup||Confere se o arquivo pode ser descriptografado e lido." \
-      "0" "Voltar||Retorna ao menu principal.")"
+      "0" "Voltar||Retorna ao menu anterior.")"
 
     case "$choice" in
       1) backup_export; ui_pause ;;
@@ -318,58 +353,92 @@ backup_menu() {
   done
 }
 
+vps_menu() {
+  while true; do
+    local choice
+    choice="$(installer_menu_with_summary "VPS" \
+      "1" "Preparar VPS||Instala Docker, Swarm, Traefik e Portainer." \
+      "2" "Painel detalhado||Mostra Docker, stacks e ferramentas instaladas." \
+      "3" "Atualizar pacotes do sistema||Executa apt-get update e apt-get upgrade -y." \
+      "4" "Backup / Migração||Exporta, valida e importa o estado da VPS." \
+      "0" "Voltar||Retorna ao menu principal.")"
+
+    case "$choice" in
+      1) recipe_base_install ;;
+      2) show_status ;;
+      3) system_upgrade_packages_interactive ;;
+      4) backup_menu ;;
+      0|"") return 0 ;;
+    esac
+  done
+}
+
+tools_menu() {
+  while true; do
+    local choice
+    choice="$(installer_menu_with_summary "Ferramentas" \
+      "1" "Instalar PostgreSQL||Cria a stack do banco com volume persistente." \
+      "2" "Instalar Redis||Cria a stack do cache e fila com persistência." \
+      "3" "Instalar n8n||Publica editor, webhook, worker e runners externos." \
+      "4" "Instalar Uptime Kuma||Publica monitoramento com escolha entre v1 e v2." \
+      "5" "Instalar Evolution API||Publica a API com Postgres e Redis internos." \
+      "6" "Atualizar ferramenta instalada||Reimplanta a stack e aplica a versão testada." \
+      "7" "Remover stack||Exclui uma stack pelo Portainer sem apagar volumes." \
+      "0" "Voltar||Retorna ao menu principal.")"
+
+    case "$choice" in
+      1) recipe_postgres_install ;;
+      2) recipe_redis_install ;;
+      3) recipe_n8n_install ;;
+      4) recipe_uptime_kuma_install ;;
+      5) recipe_evolution_install ;;
+      6) recipe_update_installed_tool ;;
+      7) remove_stack_menu ;;
+      0|"") return 0 ;;
+    esac
+  done
+}
+
+portainer_menu() {
+  while true; do
+    local choice
+    choice="$(installer_menu_with_summary "Portainer" \
+      "1" "Redefinir credenciais||Atualiza a autenticação usada pelo instalador." \
+      "2" "Remover stack||Exclui uma stack pelo Portainer sem apagar volumes." \
+      "0" "Voltar||Retorna ao menu principal.")"
+
+    case "$choice" in
+      1) portainer_reset_credentials ;;
+      2) remove_stack_menu ;;
+      0|"") return 0 ;;
+    esac
+  done
+}
+
 main_menu() {
   while true; do
-    installer_header
-
     local choice
-    if ui_has_dialog; then
-      choice="$(ui_menu_with_text "Menu principal" "$(installer_dashboard_text)" \
-        "1" "Preparar VPS: Docker + Swarm + Traefik + Portainer||Instala a base completa e configura o Portainer." \
-        "2" "Instalar PostgreSQL||Cria a stack do banco com volume persistente." \
-        "3" "Instalar Redis||Cria a stack do cache e fila com persistência." \
-        "4" "Instalar n8n||Publica editor, webhook, worker e runners externos." \
-        "5" "Instalar Uptime Kuma||Publica monitoramento com escolha entre v1 e v2." \
-        "6" "Instalar Evolution API||Publica a API com Postgres e Redis internos." \
-        "7" "Ver painel detalhado da VPS||Mostra Docker, Swarm, stacks e consumo atual." \
-        "8" "Atualizar ferramenta instalada||Reimplanta a stack e atualiza a tag testada disponível." \
-        "9" "Remover stack||Exclui uma stack pelo Portainer sem apagar volumes." \
-        "10" "Redefinir credenciais do Portainer||Atualiza a autenticação usada pelo instalador." \
-        "11" "Backup / Migração||Exporta, valida e importa o estado da VPS." \
-        "12" "Atualizar pacotes da VPS||Executa apt-get update e apt-get upgrade -y." \
+    if installer_has_portainer; then
+      choice="$(installer_menu_with_summary "Menu principal" \
+        "1" "VPS||Base da VPS, painel detalhado, pacotes e backup." \
+        "2" "Ferramentas||Instalação, atualização e remoção de stacks." \
+        "3" "Portainer||Credenciais e operações ligadas ao Portainer." \
         "0" "Sair||Encerra o instalador.")"
     else
-      installer_show_dashboard
-      echo
-      choice="$(ui_menu "Menu principal" \
-        "1" "Preparar VPS: Docker + Swarm + Traefik + Portainer||Instala a base completa e configura o Portainer." \
-        "2" "Instalar PostgreSQL||Cria a stack do banco com volume persistente." \
-        "3" "Instalar Redis||Cria a stack do cache e fila com persistência." \
-        "4" "Instalar n8n||Publica editor, webhook, worker e runners externos." \
-        "5" "Instalar Uptime Kuma||Publica monitoramento com escolha entre v1 e v2." \
-        "6" "Instalar Evolution API||Publica a API com Postgres e Redis internos." \
-        "7" "Ver painel detalhado da VPS||Mostra Docker, Swarm, stacks e consumo atual." \
-        "8" "Atualizar ferramenta instalada||Reimplanta a stack e atualiza a tag testada disponível." \
-        "9" "Remover stack||Exclui uma stack pelo Portainer sem apagar volumes." \
-        "10" "Redefinir credenciais do Portainer||Atualiza a autenticação usada pelo instalador." \
-        "11" "Backup / Migração||Exporta, valida e importa o estado da VPS." \
-        "12" "Atualizar pacotes da VPS||Executa apt-get update e apt-get upgrade -y." \
+      choice="$(installer_menu_with_summary "Menu principal" \
+        "1" "VPS||Base da VPS, painel detalhado, pacotes e backup." \
+        "2" "Ferramentas||Instalação, atualização e remoção de stacks." \
         "0" "Sair||Encerra o instalador.")"
     fi
 
     case "$choice" in
-      1) recipe_base_install ;;
-      2) recipe_postgres_install ;;
-      3) recipe_redis_install ;;
-      4) recipe_n8n_install ;;
-      5) recipe_uptime_kuma_install ;;
-      6) recipe_evolution_install ;;
-      7) show_status ;;
-      8) recipe_update_installed_tool ;;
-      9) remove_stack_menu ;;
-      10) portainer_reset_credentials ;;
-      11) backup_menu ;;
-      12) system_upgrade_packages_interactive ;;
+      1) vps_menu ;;
+      2) tools_menu ;;
+      3)
+        if installer_has_portainer; then
+          portainer_menu
+        fi
+        ;;
       0|"") ui_info "Saindo."; exit 0 ;;
     esac
   done

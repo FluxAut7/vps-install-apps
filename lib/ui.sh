@@ -30,6 +30,19 @@ ui_rule() {
   ui_repeat "─" "$width"
 }
 
+ui_split_menu_label() {
+  local raw="$1"
+  local label desc
+  if [[ "$raw" == *"||"* ]]; then
+    label="${raw%%||*}"
+    desc="${raw#*||}"
+  else
+    label="$raw"
+    desc=""
+  fi
+  printf '%s\n%s' "$label" "$desc"
+}
+
 ui_title() {
   local title="$1"
   local subtitle="${2:-}"
@@ -71,8 +84,16 @@ ui_kv() {
 
 ui_list_item() {
   local key="$1"
-  local value="$2"
-  printf '  \033[1;93m[%s]\033[0m %s\n' "$key" "$value" >&2
+  local raw="$2"
+  local split label desc
+  split="$(ui_split_menu_label "$raw")"
+  label="${split%%$'\n'*}"
+  desc="${split#*$'\n'}"
+
+  printf '  \033[1;93m[%s]\033[0m %s\n' "$key" "$label" >&2
+  if [[ -n "$desc" ]]; then
+    printf '      \033[38;5;244m%s\033[0m\n' "$desc" >&2
+  fi
 }
 
 ui_hint() {
@@ -99,8 +120,22 @@ ui_menu() {
   shift
 
   if ui_has_dialog; then
+    local dialog_args=()
+    local args=("$@")
+    local i split label desc item
+    for ((i=0; i<${#args[@]}; i+=2)); do
+      split="$(ui_split_menu_label "${args[$((i+1))]}")"
+      label="${split%%$'\n'*}"
+      desc="${split#*$'\n'}"
+      item="$label"
+      if [[ -n "$desc" ]]; then
+        item="$label - $desc"
+      fi
+      dialog_args+=("${args[$i]}" "$item")
+    done
+
     local result
-    result="$(dialog --clear --stdout --title "$title" --menu "Escolha uma opção:" 22 90 14 "$@")" || true
+    result="$(dialog --clear --stdout --title "$title" --menu "Escolha uma opção:" 22 96 14 "${dialog_args[@]}")" || true
     printf '%s' "$result"
     return 0
   fi

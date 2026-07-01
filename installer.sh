@@ -103,11 +103,11 @@ backup_menu() {
     installer_header
     local choice
     choice="$(ui_menu "Backup / Migração" \
-      "1" "Exportar configurações e credenciais" \
-      "2" "Importar backup nesta VPS" \
-      "3" "Listar backups locais" \
-      "4" "Validar backup" \
-      "0" "Voltar")"
+      "1" "Exportar configurações e credenciais||Gera um backup criptografado do estado local." \
+      "2" "Importar backup nesta VPS||Restaura stacks e credenciais a partir de um arquivo .enc." \
+      "3" "Listar backups locais||Mostra os arquivos de backup disponíveis no servidor." \
+      "4" "Validar backup||Confere se o arquivo pode ser descriptografado e lido." \
+      "0" "Voltar||Retorna ao menu principal.")"
 
     case "$choice" in
       1) backup_export; ui_pause ;;
@@ -124,18 +124,18 @@ main_menu() {
     installer_header
     local choice
     choice="$(ui_menu "Menu principal" \
-      "1" "Preparar VPS: Docker + Swarm + Traefik + Portainer" \
-      "2" "Instalar PostgreSQL" \
-      "3" "Instalar Redis" \
-      "4" "Instalar n8n" \
-      "5" "Instalar Uptime Kuma" \
-      "6" "Instalar Evolution API" \
-      "7" "Status" \
-      "8" "Remover stack" \
-      "9" "Redefinir credenciais do Portainer" \
-      "10" "Backup / Migração" \
-      "11" "Atualizar pacotes da VPS" \
-      "0" "Sair")"
+      "1" "Preparar VPS: Docker + Swarm + Traefik + Portainer||Instala a base completa e configura o Portainer." \
+      "2" "Instalar PostgreSQL||Cria a stack do banco com volume persistente." \
+      "3" "Instalar Redis||Cria a stack do cache e fila com persistência." \
+      "4" "Instalar n8n||Publica editor, webhook, worker e runners externos." \
+      "5" "Instalar Uptime Kuma||Publica monitoramento com escolha entre v1 e v2." \
+      "6" "Instalar Evolution API||Publica a API com Postgres e Redis internos." \
+      "7" "Status||Mostra Docker, Swarm, stacks e apps registrados." \
+      "8" "Remover stack||Exclui uma stack pelo Portainer sem apagar volumes." \
+      "9" "Redefinir credenciais do Portainer||Atualiza a autenticação usada pelo instalador." \
+      "10" "Backup / Migração||Exporta, valida e importa o estado da VPS." \
+      "11" "Atualizar pacotes da VPS||Executa apt-get update e apt-get upgrade -y." \
+      "0" "Sair||Encerra o instalador.")"
 
     case "$choice" in
       1) recipe_base_install ;;

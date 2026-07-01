@@ -143,19 +143,21 @@ system_format_mib() {
 }
 
 system_memory_usage_line() {
-  awk '
+  local mem_values used total
+  mem_values="$(awk '
     /MemTotal:/ { total = $2 / 1024 }
     /MemAvailable:/ { available = $2 / 1024 }
     END {
+      if (available == "") available = 0
       used = total - available
       if (used < 0) used = 0
-      printf "%s / %s", used, total
+      printf "%.0f %.0f", used, total
     }
-  ' /proc/meminfo | while IFS='/' read -r used total; do
-    used="${used// /}"
-    total="${total// /}"
-    printf '%s / %s' "$(system_format_mib "$used")" "$(system_format_mib "$total")"
-  done
+  ' /proc/meminfo)"
+
+  used="${mem_values%% *}"
+  total="${mem_values##* }"
+  printf '%s / %s' "$(system_format_mib "$used")" "$(system_format_mib "$total")"
 }
 
 system_disk_usage_line() {

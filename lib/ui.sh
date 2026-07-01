@@ -13,6 +13,15 @@ ui_term_width() {
   printf '%s' "$width"
 }
 
+ui_term_height() {
+  local height
+  height="$(tput lines 2>/dev/null || printf '24')"
+  if [[ -z "$height" || "$height" -lt 20 ]]; then
+    height=20
+  fi
+  printf '%s' "$height"
+}
+
 ui_repeat() {
   local char="$1"
   local count="$2"
@@ -115,6 +124,33 @@ ui_has_dialog() {
   command -v dialog >/dev/null 2>&1 && [[ -t 0 && -t 2 ]]
 }
 
+ui_dialog_size() {
+  local width height
+  width="$(ui_term_width)"
+  height="$(ui_term_height)"
+
+  if (( width > 140 )); then
+    width=140
+  elif (( width > 8 )); then
+    width=$((width - 4))
+  fi
+
+  if (( height > 30 )); then
+    height=30
+  elif (( height > 8 )); then
+    height=$((height - 4))
+  fi
+
+  if (( width < 96 )); then
+    width=96
+  fi
+  if (( height < 22 )); then
+    height=22
+  fi
+
+  printf '%s\t%s' "$height" "$width"
+}
+
 ui_menu() {
   local title="$1"
   shift
@@ -122,20 +158,20 @@ ui_menu() {
   if ui_has_dialog; then
     local dialog_args=()
     local args=("$@")
-    local i split label desc item
+    local i split label desc
     for ((i=0; i<${#args[@]}; i+=2)); do
       split="$(ui_split_menu_label "${args[$((i+1))]}")"
       label="${split%%$'\n'*}"
       desc="${split#*$'\n'}"
-      item="$label"
-      if [[ -n "$desc" ]]; then
-        item="$label - $desc"
-      fi
-      dialog_args+=("${args[$i]}" "$item")
+      dialog_args+=("${args[$i]}" "$label" "$desc")
     done
 
-    local result
-    result="$(dialog --clear --stdout --title "$title" --menu "Escolha uma opção:" 22 96 14 "${dialog_args[@]}")" || true
+    local size height width result
+    size="$(ui_dialog_size)"
+    height="${size%%$'\t'*}"
+    width="${size#*$'\t'}"
+
+    result="$(dialog --clear --stdout --item-help --title "$title" --menu "Escolha uma opção:" "$height" "$width" 14 "${dialog_args[@]}")" || true
     printf '%s' "$result"
     return 0
   fi

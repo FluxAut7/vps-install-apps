@@ -14,7 +14,7 @@ services:
           - node.role == manager
 
   api:
-    image: evoapicloud/evolution-api:latest
+    image: __EVOLUTION_IMAGE__
     volumes:
       - __STACK_NAME___instances:/evolution/instances
     networks:

@@ -18,6 +18,8 @@ export VPS_INSTALLER_SOURCE_DIR="$SCRIPT_DIR"
 . "$SCRIPT_DIR/lib/backup.sh"
 # shellcheck source=lib/dependencies.sh
 . "$SCRIPT_DIR/lib/dependencies.sh"
+# shellcheck source=lib/catalog.sh
+. "$SCRIPT_DIR/lib/catalog.sh"
 
 # shellcheck source=recipes/base.sh
 . "$SCRIPT_DIR/recipes/base.sh"
@@ -31,6 +33,8 @@ export VPS_INSTALLER_SOURCE_DIR="$SCRIPT_DIR"
 . "$SCRIPT_DIR/recipes/uptime-kuma.sh"
 # shellcheck source=recipes/evolution-api.sh
 . "$SCRIPT_DIR/recipes/evolution-api.sh"
+# shellcheck source=recipes/update.sh
+. "$SCRIPT_DIR/recipes/update.sh"
 
 installer_header() {
   ui_clear
@@ -39,27 +43,163 @@ installer_header() {
   echo
 }
 
+installer_tool_label() {
+  local app_name="$1"
+  local app_type="$2"
+  case "$app_type:$app_name" in
+    base:traefik) printf '%s' 'Traefik' ;;
+    base:portainer) printf '%s' 'Portainer' ;;
+    postgres:*) printf '%s' 'PostgreSQL' ;;
+    redis:*) printf '%s' 'Redis' ;;
+    n8n:*) printf '%s' 'n8n' ;;
+    uptime-kuma:*) printf '%s' 'Uptime Kuma' ;;
+    evolution-api:*) printf '%s' 'Evolution API' ;;
+    *) printf '%s' "$app_name" ;;
+  esac
+}
+
+installer_tool_version() {
+  local app_file="$1"
+  local app_name="$2"
+  local app_type="$3"
+  [[ -f "$app_file" ]] || return 0
+  state_source "$app_file"
+
+  case "$app_type:$app_name" in
+    base:portainer) printf '%s' "${PORTAINER_CHANNEL:-${APP_IMAGE##*:}}" ;;
+    base:traefik) printf '%s' "${TRAEFIK_IMAGE##*:}" ;;
+    postgres:*) printf '%s' "${POSTGRES_TAG:-${APP_IMAGE##*:}}" ;;
+    redis:*) printf '%s' "${REDIS_TAG:-${APP_IMAGE##*:}}" ;;
+    n8n:*) printf '%s' "${N8N_VERSION:-${APP_IMAGE##*:}}" ;;
+    uptime-kuma:*) printf 'v%s' "${UPTIME_KUMA_MAJOR_VERSION:-${APP_IMAGE##*:}}" ;;
+    evolution-api:*) printf '%s' "${EVOLUTION_TAG:-${APP_IMAGE##*:}}" ;;
+    *) printf '%s' "${APP_IMAGE##*:}" ;;
+  esac
+}
+
+installer_stack_usage_text() {
+  local usage_file="$1"
+  local stack_name="$2"
+  [[ -f "$usage_file" ]] || {
+    printf '%s' 'sem leitura de consumo'
+    return 0
+  }
+
+  local line containers cpu mem
+  line="$(awk -F '\t' -v stack="$stack_name" '$1 == stack { print $2 "\t" $3 "\t" $4; exit }' "$usage_file")"
+  if [[ -z "$line" ]]; then
+    printf '%s' 'sem contêiner ativo no momento'
+    return 0
+  fi
+
+  containers="${line%%$'\t'*}"
+  line="${line#*$'\t'}"
+  cpu="${line%%$'\t'*}"
+  mem="${line#*$'\t'}"
+  printf '%s cont. | CPU %s%% | RAM %s' "$containers" "$cpu" "$(system_format_mib "$mem")"
+}
+
+installer_live_stack_names() {
+  command -v docker >/dev/null 2>&1 || return 0
+  docker stack ls --format '{{.Name}}' 2>/dev/null || true
+}
+
+installer_inventory_stack_names() {
+  [[ -s "$STATE_DIR/apps.tsv" ]] || return 0
+  awk -F '\t' '{ print $2 }' "$STATE_DIR/apps.tsv" | sort -u
+}
+
+installer_join_lines() {
+  awk 'NF { out = out (out ? ", " : "") $0 } END { print out }'
+}
+
+installer_untracked_stack_line() {
+  command -v docker >/dev/null 2>&1 || return 0
+  local inventory_file live_file diff_file
+  inventory_file="$(mktemp "$RUN_DIR/inventory-stacks.XXXXXX")"
+  live_file="$(mktemp "$RUN_DIR/live-stacks.XXXXXX")"
+  diff_file="$(mktemp "$RUN_DIR/untracked-stacks.XXXXXX")"
+
+  installer_inventory_stack_names > "$inventory_file"
+  installer_live_stack_names | sort -u > "$live_file"
+  comm -23 "$live_file" "$inventory_file" > "$diff_file" || true
+
+  if [[ -s "$diff_file" ]]; then
+    installer_join_lines < "$diff_file"
+  fi
+
+  rm -f "$inventory_file" "$live_file" "$diff_file"
+}
+
+installer_show_dashboard() {
+  state_init
+  ui_section "Resumo da VPS"
+  ui_kv "SO" "${VPSI_OS_ID:-desconhecido} ${VPSI_OS_VERSION:-}"
+  if command -v docker >/dev/null 2>&1; then
+    ui_kv "Uso atual" "$(system_vps_usage_line)"
+    ui_kv "Swarm" "$(docker info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null || printf 'indisponível')"
+    ui_kv "Stacks Docker" "$(installer_live_stack_names | installer_join_lines)"
+  else
+    ui_kv "Docker" "não instalado"
+  fi
+
+  local extra_stacks
+  extra_stacks="$(installer_untracked_stack_line || true)"
+  if [[ -n "$extra_stacks" ]]; then
+    ui_warn "Stacks detectadas fora do inventário local: $extra_stacks"
+  fi
+
+  echo
+  ui_section "Ferramentas instaladas"
+  if [[ ! -s "$STATE_DIR/apps.tsv" ]]; then
+    ui_hint "Nenhuma ferramenta instalada foi registrada pelo instalador."
+    return 0
+  fi
+
+  local usage_file=""
+  if command -v docker >/dev/null 2>&1; then
+    usage_file="$(mktemp "$RUN_DIR/usage-report.XXXXXX")"
+    system_collect_stack_usage > "$usage_file" 2>/dev/null || true
+  fi
+
+  local app_name stack_name app_type domain app_file label version usage details
+  while IFS=$'\t' read -r app_name stack_name app_type domain; do
+    [[ -n "$app_name" ]] || continue
+    app_file="$APP_STATE_DIR/${app_name}.env"
+    label="$(installer_tool_label "$app_name" "$app_type")"
+    version="$(installer_tool_version "$app_file" "$app_name" "$app_type")"
+    usage="$(installer_stack_usage_text "$usage_file" "$stack_name")"
+    printf '  \033[1;93m%-18s\033[0m %s\n' "$label" "$usage" >&2
+    details="stack=$stack_name"
+    if [[ -n "$version" ]]; then
+      details="$details | versão=$version"
+    fi
+    if [[ -n "$domain" ]]; then
+      details="$details | domínio=$domain"
+    fi
+    printf '      \033[38;5;244m%s\033[0m\n' "$details" >&2
+  done < "$STATE_DIR/apps.tsv"
+
+  [[ -n "$usage_file" ]] && rm -f "$usage_file"
+}
+
 show_status() {
   installer_header
   state_init
-  ui_section "Ambiente"
-  ui_kv "Diretório" "$VPSI_HOME"
-  echo
+  installer_show_dashboard
 
+  echo
   if command -v docker >/dev/null 2>&1; then
     ui_section "Docker"
     docker --version || true
     docker info --format 'Swarm: {{.Swarm.LocalNodeState}}' 2>/dev/null || true
     echo
-    ui_section "Stacks"
+    ui_section "Stacks do Docker"
     docker stack ls 2>/dev/null || true
   else
     ui_warn "Docker não instalado."
   fi
 
-  echo
-  ui_section "Apps registrados"
-  state_list_apps || true
   ui_pause
 }
 
@@ -122,6 +262,9 @@ backup_menu() {
 main_menu() {
   while true; do
     installer_header
+    installer_show_dashboard
+    echo
+
     local choice
     choice="$(ui_menu "Menu principal" \
       "1" "Preparar VPS: Docker + Swarm + Traefik + Portainer||Instala a base completa e configura o Portainer." \
@@ -130,11 +273,12 @@ main_menu() {
       "4" "Instalar n8n||Publica editor, webhook, worker e runners externos." \
       "5" "Instalar Uptime Kuma||Publica monitoramento com escolha entre v1 e v2." \
       "6" "Instalar Evolution API||Publica a API com Postgres e Redis internos." \
-      "7" "Status||Mostra Docker, Swarm, stacks e apps registrados." \
-      "8" "Remover stack||Exclui uma stack pelo Portainer sem apagar volumes." \
-      "9" "Redefinir credenciais do Portainer||Atualiza a autenticação usada pelo instalador." \
-      "10" "Backup / Migração||Exporta, valida e importa o estado da VPS." \
-      "11" "Atualizar pacotes da VPS||Executa apt-get update e apt-get upgrade -y." \
+      "7" "Ver painel detalhado da VPS||Mostra Docker, Swarm, stacks e consumo atual." \
+      "8" "Atualizar ferramenta instalada||Reimplanta a stack e atualiza a tag testada disponível." \
+      "9" "Remover stack||Exclui uma stack pelo Portainer sem apagar volumes." \
+      "10" "Redefinir credenciais do Portainer||Atualiza a autenticação usada pelo instalador." \
+      "11" "Backup / Migração||Exporta, valida e importa o estado da VPS." \
+      "12" "Atualizar pacotes da VPS||Executa apt-get update e apt-get upgrade -y." \
       "0" "Sair||Encerra o instalador.")"
 
     case "$choice" in
@@ -145,10 +289,11 @@ main_menu() {
       5) recipe_uptime_kuma_install ;;
       6) recipe_evolution_install ;;
       7) show_status ;;
-      8) remove_stack_menu ;;
-      9) portainer_reset_credentials ;;
-      10) backup_menu ;;
-      11) system_upgrade_packages_interactive ;;
+      8) recipe_update_installed_tool ;;
+      9) remove_stack_menu ;;
+      10) portainer_reset_credentials ;;
+      11) backup_menu ;;
+      12) system_upgrade_packages_interactive ;;
       0|"") ui_info "Saindo."; exit 0 ;;
     esac
   done

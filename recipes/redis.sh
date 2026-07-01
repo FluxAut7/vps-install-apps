@@ -6,7 +6,7 @@ recipe_redis_install() {
   dependencies_confirm "redis" || return 0
   dependencies_require_base
 
-  local suffix stack_name service_name password stack_file network_name
+  local suffix stack_name service_name password stack_file network_name redis_tag redis_image
   suffix="$(ui_input "Sufixo opcional da stack, vazio para redis" "")"
   if [[ -n "$suffix" ]]; then
     stack_name="redis_$suffix"
@@ -20,6 +20,8 @@ recipe_redis_install() {
     fail "Stack ja existe: $stack_name"
   fi
 
+  redis_tag="$(catalog_select_redis_tag)"
+  redis_image="$(catalog_redis_image "$redis_tag")"
   password="$(state_random_hex 16)"
   stack_file="$(stack_path "$stack_name")"
   network_name="$(state_get NETWORK_NAME)"
@@ -29,10 +31,12 @@ recipe_redis_install() {
     STACK_NAME "$stack_name" \
     SERVICE_NAME "$service_name" \
     NETWORK_NAME "$network_name" \
+    REDIS_IMAGE "$redis_image" \
     REDIS_PASSWORD "$password"
 
   portainer_deploy_stack "$stack_name" "$stack_file"
-  state_register_app "$stack_name" "$stack_name" "redis" "" "redis:7-alpine" "$stack_file"
+  state_register_app "$stack_name" "$stack_name" "redis" "" "$redis_image" "$stack_file"
+  state_set REDIS_TAG "$redis_tag" "$APP_STATE_DIR/${stack_name}.env"
   state_set REDIS_HOST "$service_name" "$APP_STATE_DIR/${stack_name}.env"
   state_set REDIS_PASSWORD "$password" "$APP_STATE_DIR/${stack_name}.env"
   state_set REDIS_URL "redis://:$password@$service_name:6379/0" "$APP_STATE_DIR/${stack_name}.env"

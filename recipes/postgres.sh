@@ -6,7 +6,7 @@ recipe_postgres_install() {
   dependencies_confirm "postgres" || return 0
   dependencies_require_base
 
-  local suffix stack_name service_name password stack_file
+  local suffix stack_name service_name password stack_file network_name postgres_tag postgres_image
   suffix="$(ui_input "Sufixo opcional da stack, vazio para postgres" "")"
   if [[ -n "$suffix" ]]; then
     stack_name="postgres_$suffix"
@@ -20,10 +20,11 @@ recipe_postgres_install() {
     fail "Stack ja existe: $stack_name"
   fi
 
+  postgres_tag="$(catalog_select_postgres_tag)"
+  postgres_image="$(catalog_postgres_image "$postgres_tag")"
   password="$(state_random_hex 16)"
   stack_file="$(stack_path "$stack_name")"
 
-  local network_name
   network_name="$(state_get NETWORK_NAME)"
   [[ -n "$network_name" ]] || fail "Rede não configurada. Instale a base primeiro."
 
@@ -31,10 +32,12 @@ recipe_postgres_install() {
     STACK_NAME "$stack_name" \
     SERVICE_NAME "$service_name" \
     NETWORK_NAME "$network_name" \
+    POSTGRES_IMAGE "$postgres_image" \
     POSTGRES_PASSWORD "$password"
 
   portainer_deploy_stack "$stack_name" "$stack_file"
-  state_register_app "$stack_name" "$stack_name" "postgres" "" "postgres:16-alpine" "$stack_file"
+  state_register_app "$stack_name" "$stack_name" "postgres" "" "$postgres_image" "$stack_file"
+  state_set POSTGRES_TAG "$postgres_tag" "$APP_STATE_DIR/${stack_name}.env"
   state_set POSTGRES_HOST "$service_name" "$APP_STATE_DIR/${stack_name}.env"
   state_set POSTGRES_USER "postgres" "$APP_STATE_DIR/${stack_name}.env"
   state_set POSTGRES_PASSWORD "$password" "$APP_STATE_DIR/${stack_name}.env"
@@ -52,12 +55,14 @@ recipe_postgres_install_default() {
 
   local stack_name="postgres"
   local service_name="postgres"
-  local password stack_file network_name
+  local password stack_file network_name postgres_tag postgres_image
 
   if portainer_stack_exists "$stack_name"; then
     return 0
   fi
 
+  postgres_tag="$(catalog_select_postgres_tag)"
+  postgres_image="$(catalog_postgres_image "$postgres_tag")"
   password="$(state_random_hex 16)"
   stack_file="$(stack_path "$stack_name")"
   network_name="$(state_get NETWORK_NAME)"
@@ -67,15 +72,18 @@ recipe_postgres_install_default() {
     STACK_NAME "$stack_name" \
     SERVICE_NAME "$service_name" \
     NETWORK_NAME "$network_name" \
+    POSTGRES_IMAGE "$postgres_image" \
     POSTGRES_PASSWORD "$password"
 
   portainer_deploy_stack "$stack_name" "$stack_file"
-  state_register_app "$stack_name" "$stack_name" "postgres" "" "postgres:16-alpine" "$stack_file"
+  state_register_app "$stack_name" "$stack_name" "postgres" "" "$postgres_image" "$stack_file"
+  state_set POSTGRES_TAG "$postgres_tag" "$APP_STATE_DIR/${stack_name}.env"
   state_set POSTGRES_HOST "$service_name" "$APP_STATE_DIR/${stack_name}.env"
   state_set POSTGRES_USER "postgres" "$APP_STATE_DIR/${stack_name}.env"
   state_set POSTGRES_PASSWORD "$password" "$APP_STATE_DIR/${stack_name}.env"
   state_set POSTGRES_URL "postgresql://postgres:$password@$service_name:5432/postgres" "$APP_STATE_DIR/${stack_name}.env"
 }
+
 recipe_postgres_default_file() {
   if [[ -f "$APP_STATE_DIR/postgres.env" ]]; then
     printf '%s' "$APP_STATE_DIR/postgres.env"

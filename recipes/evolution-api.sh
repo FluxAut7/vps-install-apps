@@ -8,7 +8,7 @@ recipe_evolution_install() {
 
   recipe_postgres_ensure_default
 
-  local suffix stack_name domain api_key redis_password stack_file network_name
+  local suffix stack_name domain api_key redis_password stack_file network_name evolution_tag evolution_image
   suffix="$(ui_input "Sufixo opcional da stack, vazio para evolution" "")"
   if [[ -n "$suffix" ]]; then
     stack_name="evolution_$suffix"
@@ -30,6 +30,8 @@ recipe_evolution_install() {
   database="$stack_name"
   recipe_postgres_create_database "$database"
 
+  evolution_tag="$(catalog_select_evolution_tag)"
+  evolution_image="$(catalog_evolution_image "$evolution_tag")"
   api_key="$(state_random_hex 16)"
   redis_password="$(state_random_hex 16)"
   stack_file="$(stack_path "$stack_name")"
@@ -39,6 +41,7 @@ recipe_evolution_install() {
     STACK_NAME "$stack_name" \
     NETWORK_NAME "$network_name" \
     DOMAIN "$domain" \
+    EVOLUTION_IMAGE "$evolution_image" \
     API_KEY "$api_key" \
     POSTGRES_HOST "$pg_host" \
     POSTGRES_PASSWORD "$pg_pass" \
@@ -46,7 +49,8 @@ recipe_evolution_install() {
     REDIS_PASSWORD "$redis_password"
 
   portainer_deploy_stack "$stack_name" "$stack_file"
-  state_register_app "$stack_name" "$stack_name" "evolution-api" "$domain" "evoapicloud/evolution-api:latest" "$stack_file"
+  state_register_app "$stack_name" "$stack_name" "evolution-api" "$domain" "$evolution_image" "$stack_file"
+  state_set EVOLUTION_TAG "$evolution_tag" "$APP_STATE_DIR/${stack_name}.env"
   state_set EVOLUTION_API_KEY "$api_key" "$APP_STATE_DIR/${stack_name}.env"
   state_set POSTGRES_DATABASE "$database" "$APP_STATE_DIR/${stack_name}.env"
   state_set REDIS_PASSWORD "$redis_password" "$APP_STATE_DIR/${stack_name}.env"

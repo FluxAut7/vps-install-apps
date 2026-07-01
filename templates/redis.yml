@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   __SERVICE_NAME__:
-    image: redis:7-alpine
+    image: __REDIS_IMAGE__
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "__REDIS_PASSWORD__"]
     volumes:
       - __STACK_NAME___data:/data

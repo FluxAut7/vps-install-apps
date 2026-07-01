@@ -12,24 +12,11 @@ recipe_base_install() {
   server_name="$(ui_input "Nome do servidor, sem espaços" "$(hostname)")"
   network_name="$(ui_input "Nome da rede interna do Swarm" "vps_public")"
   ssl_email="$(ui_input "Email para certificados Let's Encrypt" "")"
-  portainer_channel="$(ui_menu "Canal do Portainer" \
-    "lts" "LTS - recomendado para produção" \
-    "sts" "STS - novidades mais recentes")"
+  portainer_channel="$(catalog_select_portainer_channel "$(state_get PORTAINER_CHANNEL "$STATE_DIR/config.env" || true)")"
   [[ -n "$portainer_channel" ]] || return 0
 
-  case "$portainer_channel" in
-    lts)
-      portainer_image="portainer/portainer-ce:lts"
-      portainer_agent_image="portainer/agent:lts"
-      ;;
-    sts)
-      portainer_image="portainer/portainer-ce:sts"
-      portainer_agent_image="portainer/agent:sts"
-      ;;
-    *)
-      fail "Canal do Portainer inválido: $portainer_channel"
-      ;;
-  esac
+  portainer_image="$(catalog_portainer_image "$portainer_channel")"
+  portainer_agent_image="$(catalog_portainer_agent_image "$portainer_channel")"
 
   [[ -n "$portainer_domain" && -n "$portainer_user" && -n "$portainer_password" && -n "$network_name" && -n "$ssl_email" ]] \
     || fail "Campos obrigatórios não preenchidos."
@@ -55,6 +42,7 @@ Imagem Portainer: $portainer_image"
   state_set PORTAINER_CHANNEL "$portainer_channel"
   state_set PORTAINER_IMAGE "$portainer_image"
   state_set PORTAINER_AGENT_IMAGE "$portainer_agent_image"
+  state_set TRAEFIK_IMAGE "$(catalog_traefik_image)"
 
   local traefik_stack portainer_stack
   traefik_stack="$(stack_path traefik)"
@@ -62,7 +50,8 @@ Imagem Portainer: $portainer_image"
 
   stack_render "$VPS_INSTALLER_SOURCE_DIR/templates/traefik.yml" "$traefik_stack" \
     NETWORK_NAME "$network_name" \
-    SSL_EMAIL "$ssl_email"
+    SSL_EMAIL "$ssl_email" \
+    TRAEFIK_IMAGE "$(catalog_traefik_image)"
 
   stack_render "$VPS_INSTALLER_SOURCE_DIR/templates/portainer.yml" "$portainer_stack" \
     NETWORK_NAME "$network_name" \
@@ -80,7 +69,8 @@ Imagem Portainer: $portainer_image"
 
   recipe_base_init_portainer "$portainer_domain" "$portainer_user" "$portainer_password"
 
-  state_register_app "traefik" "traefik" "base" "" "traefik:v3.4.0" "$traefik_stack"
+  state_register_app "traefik" "traefik" "base" "" "$(catalog_traefik_image)" "$traefik_stack"
+  state_set TRAEFIK_IMAGE "$(catalog_traefik_image)" "$APP_STATE_DIR/traefik.env"
   state_register_app "portainer" "portainer" "base" "$portainer_domain" "$portainer_image" "$portainer_stack"
   state_set PORTAINER_CHANNEL "$portainer_channel" "$APP_STATE_DIR/portainer.env"
   state_set PORTAINER_AGENT_IMAGE "$portainer_agent_image" "$APP_STATE_DIR/portainer.env"

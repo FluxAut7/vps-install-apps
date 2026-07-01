@@ -20,9 +20,9 @@ recipe_n8n_install() {
     fail "Stack ja existe: $stack_name"
   fi
 
-  n8n_version="$(ui_input "Versão testada do n8n" "2.11.3")"
-  n8n_image="n8nio/n8n:$n8n_version"
-  n8n_runners_image="n8nio/runners:$n8n_version"
+  n8n_version="$(catalog_select_n8n_version)"
+  n8n_image="$(catalog_n8n_image "$n8n_version")"
+  n8n_runners_image="$(catalog_n8n_runners_image "$n8n_version")"
   editor_domain="$(ui_input "Domínio do editor n8n, ex: n8n.seudomínio.com.br" "")"
   webhook_domain="$(ui_input "Domínio dos webhooks n8n, ex: webhook.seudomínio.com.br" "$editor_domain")"
   [[ -n "$editor_domain" && -n "$webhook_domain" ]] || fail "Domínios obrigatórios."

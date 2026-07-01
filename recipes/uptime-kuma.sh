@@ -7,22 +7,10 @@ recipe_uptime_kuma_install() {
   dependencies_require_base
 
   local version image suffix stack_name domain stack_file network_name
-  version="$(ui_menu "Versão do Uptime Kuma" \
-    "1" "v1 - louislam/uptime-kuma:1" \
-    "2" "v2 - louislam/uptime-kuma:2")"
+  version="$(catalog_select_uptime_kuma_major)"
   [[ -n "$version" ]] || return 0
 
-  case "$version" in
-    1)
-      image="louislam/uptime-kuma:1"
-      ;;
-    2)
-      image="louislam/uptime-kuma:2"
-      ;;
-    *)
-      fail "Versão invalida: $version"
-      ;;
-  esac
+  image="$(catalog_uptime_kuma_image "$version")"
 
   suffix="$(ui_input "Sufixo opcional da stack, vazio para uptimekuma" "")"
   if [[ -n "$suffix" ]]; then

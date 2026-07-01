@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   __SERVICE_NAME__:
-    image: postgres:16-alpine
+    image: __POSTGRES_IMAGE__
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: "__POSTGRES_PASSWORD__"

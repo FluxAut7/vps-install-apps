@@ -86,7 +86,19 @@ portainer_deploy_stack() {
     -F "SwarmID=$PORTAINER_SWARM_ID" \
     -F "file=@$stack_file" >/dev/null
   ui_success "Stack criada: $stack_name"
-  system_wait_stack "$stack_name" 180 || true
+
+  if system_wait_stack "$stack_name" 300; then
+    return 0
+  fi
+
+  ui_warn "A stack '$stack_name' foi criada no Portainer, mas os serviços não convergiram a tempo."
+  if ui_confirm "Deseja manter a stack para diagnóstico? (Não = remover a stack agora)"; then
+    ui_warn "Stack mantida para diagnóstico. Revise antes de considerar '$stack_name' pronta para uso."
+    return 1
+  fi
+
+  portainer_remove_stack "$stack_name" || true
+  fail "Instalação de '$stack_name' revertida por falha de convergência."
 }
 
 portainer_remove_stack() {

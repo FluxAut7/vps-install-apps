@@ -1,3 +1,10 @@
 *.log
 *.tmp
 .DS_Store
+
+# Configuração local do Claude Code (permissões por sessão, não compartilhável).
+.claude/
+
+# Scripts de terceiros usados como material de estudo/referência.
+# Não versionar: código de terceiros, sem relação com o pacote publicado.
+references/

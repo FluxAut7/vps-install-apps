@@ -90,22 +90,120 @@ system_ensure_network() {
   ui_success "Rede criada: $network_name"
 }
 
-system_wait_stack() {
-  local service_prefix="$1"
-  local timeout="${2:-180}"
-  local elapsed=0
+system_service_replicas_ready() {
+  awk -F'\t' '
+    {
+      frac = $2
+      sub(/ .*/, "", frac)
+      split(frac, parts, "/")
+      cur = parts[1] + 0
+      desired = parts[2] + 0
+      if (desired > 0 && cur == desired) print $1
+    }
+  '
+}
 
-  ui_info "Aguardando serviços de $service_prefix ficarem online..."
-  while (( elapsed < timeout )); do
-    if docker service ls --format '{{.Name}} {{.Replicas}}' | awk -v p="$service_prefix" '$1 ~ "^"p"_" && $2 !~ /^0\// { ok=1 } END { exit ok ? 0 : 1 }'; then
-      ui_success "Servicos detectados para $service_prefix."
-      return 0
+system_diagnose_stack() {
+  local stack_name="$1"
+  local fmt=$'{{.Name}}\t{{.Replicas}}'
+  local services
+  services="$(docker service ls --filter "label=com.docker.stack.namespace=$stack_name" --format "$fmt" 2>/dev/null)"
+
+  if [[ -z "$services" ]]; then
+    ui_warn "Nenhum serviço encontrado para a stack '$stack_name'."
+    return 0
+  fi
+
+  ui_warn "Estado dos serviços de '$stack_name':"
+  printf '%s\n' "$services" | awk -F'\t' '{ printf "  %s %s\n", $1, $2 }' >&2
+
+  local name events
+  while IFS=$'\t' read -r name _; do
+    [[ -n "$name" ]] || continue
+    events="$(docker service ps --no-trunc --format '{{.CurrentState}}|{{.Error}}' "$name" 2>/dev/null | head -5)"
+    [[ -n "$events" ]] || continue
+    ui_warn "Últimos eventos de $name:"
+    printf '%s\n' "$events" | awk -F'|' '{ if ($2 != "") printf "    %s - erro: %s\n", $1, $2; else printf "    %s\n", $1 }' >&2
+  done <<< "$services"
+
+  ui_hint "Logs completos: docker service logs <serviço>"
+}
+
+system_wait_stack() {
+  local stack_name="$1"
+  local timeout="${2:-300}"
+  local grace=30
+  local elapsed=0
+  local fmt=$'{{.Name}}\t{{.Replicas}}'
+
+  ui_info "Aguardando serviços de $stack_name ficarem online..."
+
+  while (( elapsed < grace )); do
+    if [[ -n "$(docker service ls --filter "label=com.docker.stack.namespace=$stack_name" --format "$fmt" 2>/dev/null)" ]]; then
+      break
     fi
+    sleep 3
+    elapsed=$((elapsed + 3))
+  done
+
+  local last_ready=-1 lines total ready
+  elapsed=0
+  while (( elapsed < timeout )); do
+    lines="$(docker service ls --filter "label=com.docker.stack.namespace=$stack_name" --format "$fmt" 2>/dev/null)"
+    if [[ -n "$lines" ]]; then
+      total="$(printf '%s\n' "$lines" | wc -l)"
+      ready="$(printf '%s\n' "$lines" | system_service_replicas_ready | wc -l)"
+
+      if (( ready != last_ready )); then
+        ui_info "Serviços prontos: $ready de $total ($stack_name)"
+        last_ready=$ready
+      fi
+
+      if (( ready == total )); then
+        ui_success "Serviços convergidos para $stack_name."
+        return 0
+      fi
+    fi
+
     sleep 5
     elapsed=$((elapsed + 5))
   done
 
-  ui_warn "Timeout aguardando $service_prefix. Verifique com: docker service ls"
+  ui_warn "Timeout aguardando $stack_name convergir."
+  system_diagnose_stack "$stack_name"
+  return 1
+}
+
+system_wait_https() {
+  local domain="$1"
+  local timeout="${2:-120}"
+  local elapsed=0
+  local tls_error_seen=0
+  local code exit_code
+
+  ui_info "Verificando resposta HTTPS de $domain..."
+
+  while (( elapsed < timeout )); do
+    code="$(curl -sS -o /dev/null --max-time 8 -w '%{http_code}' "https://$domain" 2>/dev/null)"
+    exit_code=$?
+
+    if [[ "$exit_code" -eq 0 && "$code" -ge 200 && "$code" -lt 500 ]]; then
+      ui_success "HTTPS respondeu em $domain (código $code)."
+      return 0
+    fi
+
+    [[ "$exit_code" -eq 60 ]] && tls_error_seen=1
+
+    sleep 10
+    elapsed=$((elapsed + 10))
+  done
+
+  if [[ "$tls_error_seen" -eq 1 ]]; then
+    ui_warn "Timeout aguardando HTTPS em $domain: certificado ainda não foi emitido (erro de TLS)."
+  else
+    ui_warn "Timeout aguardando HTTPS em $domain: serviço não respondeu (conexão recusada ou DNS incorreto)."
+  fi
+  ui_hint "Verifique a emissão do certificado: docker service logs traefik_traefik --tail 50 | grep -i acme"
   return 1
 }
 

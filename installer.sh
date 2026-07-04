@@ -10,6 +10,8 @@ export VPS_INSTALLER_SOURCE_DIR="$SCRIPT_DIR"
 . "$SCRIPT_DIR/lib/state.sh"
 # shellcheck source=lib/system.sh
 . "$SCRIPT_DIR/lib/system.sh"
+# shellcheck source=lib/dns.sh
+. "$SCRIPT_DIR/lib/dns.sh"
 # shellcheck source=lib/stack.sh
 . "$SCRIPT_DIR/lib/stack.sh"
 # shellcheck source=lib/portainer.sh
@@ -20,6 +22,8 @@ export VPS_INSTALLER_SOURCE_DIR="$SCRIPT_DIR"
 . "$SCRIPT_DIR/lib/dependencies.sh"
 # shellcheck source=lib/catalog.sh
 . "$SCRIPT_DIR/lib/catalog.sh"
+# shellcheck source=lib/appdef.sh
+. "$SCRIPT_DIR/lib/appdef.sh"
 
 # shellcheck source=recipes/base.sh
 . "$SCRIPT_DIR/recipes/base.sh"
@@ -35,6 +39,8 @@ export VPS_INSTALLER_SOURCE_DIR="$SCRIPT_DIR"
 . "$SCRIPT_DIR/recipes/evolution-api.sh"
 # shellcheck source=recipes/update.sh
 . "$SCRIPT_DIR/recipes/update.sh"
+# shellcheck source=recipes/generic.sh
+. "$SCRIPT_DIR/recipes/generic.sh"
 
 installer_header() {
   ui_clear
@@ -57,7 +63,7 @@ installer_tool_label() {
     n8n:*) printf '%s' 'n8n' ;;
     uptime-kuma:*) printf '%s' 'Uptime Kuma' ;;
     evolution-api:*) printf '%s' 'Evolution API' ;;
-    *) printf '%s' "$app_name" ;;
+    *) printf '%s' "$(appdef_label_or_default "$app_type" "$app_name")" ;;
   esac
 }
 
@@ -835,6 +841,38 @@ show_status() {
   ui_pause
 }
 
+installer_stack_volume_names() {
+  local stack="$1"
+  local -A seen=()
+  local vol
+  while read -r vol; do
+    [[ -n "$vol" ]] || continue
+    seen["$vol"]=1
+  done < <(docker volume ls --filter "label=com.docker.stack.namespace=$stack" --format '{{.Name}}' 2>/dev/null)
+
+  while read -r vol; do
+    [[ -n "$vol" ]] || continue
+    seen["$vol"]=1
+  done < <(docker volume ls --format '{{.Name}}' 2>/dev/null | grep -E "^${stack}_")
+
+  local name
+  for name in "${!seen[@]}"; do
+    printf '%s\n' "$name"
+  done | sort -u
+}
+
+installer_wait_stack_gone() {
+  local stack="$1"
+  local timeout="${2:-60}"
+  local elapsed=0
+  while (( elapsed < timeout )); do
+    [[ -z "$(docker ps -q --filter "label=com.docker.stack.namespace=$stack" 2>/dev/null)" ]] && return 0
+    sleep 3
+    elapsed=$((elapsed + 3))
+  done
+  return 1
+}
+
 remove_stack_menu() {
   installer_header
   system_require_docker
@@ -844,11 +882,133 @@ remove_stack_menu() {
   stack="$(ui_input "Nome da stack para remover" "")"
   [[ -n "$stack" ]] || return 0
 
-  if ui_confirm "Remover a stack '$stack'? Volumes persistentes não serão apagados."; then
-    portainer_remove_stack "$stack"
-    state_remove_app "$stack" || true
-    ui_success "Stack removida: $stack"
+  ui_confirm "Remover a stack '$stack'?" || { ui_pause; return 0; }
+
+  portainer_remove_stack "$stack"
+  state_remove_app "$stack" || true
+  ui_success "Stack removida: $stack"
+
+  ui_info "Aguardando contêineres da stack encerrarem..."
+  installer_wait_stack_gone "$stack" 60 || ui_warn "Alguns contêineres ainda podem estar em encerramento."
+
+  local -a volumes=()
+  local vol
+  while read -r vol; do
+    [[ -n "$vol" ]] || continue
+    volumes+=("$vol")
+  done < <(installer_stack_volume_names "$stack")
+
+  if [[ "${#volumes[@]}" -eq 0 ]]; then
+    ui_pause
+    return 0
   fi
+
+  ui_section "Volumes de dados encontrados"
+  for vol in "${volumes[@]}"; do
+    ui_kv "Volume" "$vol"
+  done
+
+  if ! ui_confirm "Apagar também os ${#volumes[@]} volumes listados? Esta ação é IRREVERSÍVEL."; then
+    ui_pause
+    return 0
+  fi
+
+  local confirm_name
+  confirm_name="$(ui_input "Digite o nome da stack '$stack' para confirmar a exclusão dos dados" "")"
+  if [[ "$confirm_name" != "$stack" ]]; then
+    ui_warn "Nome não confere. Os volumes NÃO foram apagados."
+    ui_pause
+    return 0
+  fi
+
+  for vol in "${volumes[@]}"; do
+    if docker volume rm "$vol" >/dev/null 2>&1; then
+      ui_success "Volume removido: $vol"
+    else
+      ui_warn "Não foi possível remover o volume (pode estar em uso): $vol"
+    fi
+  done
+
+  ui_pause
+}
+
+installer_env_file_keys() {
+  local file="$1"
+  [[ -f "$file" ]] || return 0
+  awk -F= '/^[A-Za-z_][A-Za-z0-9_]*=/ { print $1 }' "$file"
+}
+
+installer_print_env_file() {
+  local file="$1"
+  [[ -f "$file" ]] || { ui_warn "Arquivo de credenciais não encontrado: $file"; return 0; }
+
+  # shellcheck disable=SC1090
+  (
+    . "$file"
+    local key value
+    while read -r key; do
+      [[ -n "$key" ]] || continue
+      value="$(eval 'printf "%s" "${'"$key"':-}"')"
+      ui_kv "$key" "$value"
+    done < <(installer_env_file_keys "$file")
+  )
+}
+
+installer_show_portainer_credentials() {
+  state_init
+  installer_header
+  installer_has_portainer || {
+    ui_warn "Credenciais do Portainer ainda não configuradas."
+    ui_pause
+    return 0
+  }
+  ui_warn "As credenciais aparecerão em texto claro na tela a seguir."
+  ui_confirm "Continuar?" || return 0
+  installer_header
+  ui_section "Credenciais: Portainer"
+  installer_print_env_file "$STATE_DIR/portainer.env"
+  ui_pause
+}
+
+installer_show_credentials() {
+  state_init
+  installer_header
+
+  local -a items=()
+  if [[ -s "$STATE_DIR/apps.tsv" ]]; then
+    local app_name stack_name app_type domain
+    while IFS=$'\t' read -r app_name stack_name app_type domain; do
+      [[ -n "$app_name" ]] || continue
+      [[ "$app_type" == "base" ]] && continue
+      items+=("$app_name" "$(installer_tool_label "$app_name" "$app_type")||stack=$stack_name")
+    done < "$STATE_DIR/apps.tsv"
+  fi
+
+  if installer_has_portainer; then
+    items+=("__portainer__" "Portainer||Credenciais de acesso à API/console do Portainer")
+  fi
+
+  if [[ "${#items[@]}" -eq 0 ]]; then
+    ui_warn "Nenhuma ferramenta com credenciais registrada no inventário local."
+    ui_pause
+    return 0
+  fi
+
+  local selected
+  selected="$(installer_menu_with_summary "Ver credenciais" "${items[@]}" "0" "Voltar||Retorna ao menu anterior.")"
+  [[ -n "$selected" && "$selected" != "0" ]] || return 0
+
+  if [[ "$selected" == "__portainer__" ]]; then
+    installer_show_portainer_credentials
+    return 0
+  fi
+
+  ui_warn "As credenciais aparecerão em texto claro na tela a seguir."
+  ui_confirm "Continuar?" || return 0
+
+  installer_header
+  ui_section "Credenciais: $selected"
+  installer_print_env_file "$APP_STATE_DIR/${selected}.env"
   ui_pause
 }
 
@@ -923,7 +1083,9 @@ tools_menu() {
       "5" "Instalar Uptime Kuma||Publica monitoramento com escolha entre v1 e v2." \
       "6" "Instalar Evolution API||Publica a API com Postgres e Redis internos." \
       "7" "Atualizar ferramenta instalada||Reimplanta a stack e aplica a versão testada." \
-      "8" "Remover stack||Exclui uma stack pelo Portainer sem apagar volumes." \
+      "8" "Remover stack||Exclui uma stack pelo Portainer, com opção de apagar os volumes de dados." \
+      "9" "Ver credenciais de uma ferramenta||Mostra URLs, usuários e senhas de um app instalado." \
+      "10" "Catálogo de ferramentas||Instala apps adicionais definidos por manifesto (MinIO, RabbitMQ, ...)." \
       "0" "Voltar||Retorna ao menu principal.")"
 
     case "$choice" in
@@ -935,6 +1097,8 @@ tools_menu() {
       6) recipe_evolution_install ;;
       7) recipe_update_installed_tool ;;
       8) remove_stack_menu ;;
+      9) installer_show_credentials ;;
+      10) recipe_generic_catalog_menu ;;
       0|"") return 0 ;;
     esac
   done
@@ -945,12 +1109,14 @@ portainer_menu() {
     local choice
     choice="$(installer_menu_with_summary "Portainer" \
       "1" "Redefinir credenciais||Atualiza a autenticação usada pelo instalador." \
-      "2" "Remover stack||Exclui uma stack pelo Portainer sem apagar volumes." \
+      "2" "Remover stack||Exclui uma stack pelo Portainer, com opção de apagar os volumes de dados." \
+      "3" "Ver credenciais do Portainer||Mostra URL, usuário e senha usados pelo instalador." \
       "0" "Voltar||Retorna ao menu principal.")"
 
     case "$choice" in
       1) portainer_reset_credentials ;;
       2) remove_stack_menu ;;
+      3) installer_show_portainer_credentials ;;
       0|"") return 0 ;;
     esac
   done

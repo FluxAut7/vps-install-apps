@@ -40,6 +40,39 @@ VPS_INSTALLER_ARCHIVE_URL="https://github.com/FluxAut7/vps-install-apps/archive/
 - Uptime Kuma v1/v2
 - Evolution API
 
+## Catálogo de ferramentas (data-driven)
+
+Além das receitas acima, o menu `Ferramentas > Catálogo de ferramentas` instala apps
+adicionais definidos por manifesto, sem código dedicado por app. Cada app vive em
+`apps/<slug>/` com dois arquivos:
+
+- `app.env`: manifesto declarativo (label, imagem, tags testadas, domínios, entradas,
+  segredos gerados, dependências de Postgres/Redis, linhas de resumo).
+- `stack.yml`: template do compose com placeholders `__CHAVE__`.
+
+A receita genérica (`recipes/generic.sh`) interpreta o manifesto, coleta domínios e
+entradas, gera segredos, renderiza o template e publica via Portainer. Apps do catálogo
+aparecem no painel, no menu de atualização e no backup como as demais ferramentas.
+
+Apps já incluídos: **MinIO** e **RabbitMQ**. Para adicionar outro, basta criar
+`apps/<slug>/app.env` e `apps/<slug>/stack.yml` — nenhuma alteração de código é
+necessária.
+
+## Verificações de segurança e confiabilidade
+
+- **Convergência de stack**: após cada deploy, o instalador aguarda todos os serviços da
+  stack convergirem (réplicas completas). Em caso de falha, mostra o diagnóstico
+  (`docker service ps` + erros) e oferece manter a stack para análise ou revertê-la.
+- **Validação de DNS**: antes de instalar um app com domínio, o instalador compara o IP
+  do domínio com o IP público da VPS e avisa se não baterem (inclusive detecção de proxy
+  Cloudflare), evitando falhas de emissão de certificado no Let's Encrypt.
+- **Smoke test HTTPS**: após o deploy, o instalador confirma se o domínio responde por
+  HTTPS ou orienta caso o certificado ainda esteja sendo emitido.
+- **Ver credenciais**: `Ferramentas > Ver credenciais` exibe URLs, usuários e senhas de
+  um app instalado a partir do estado local (com aviso de exibição em texto claro).
+- **Remoção com volumes**: a remoção de stack oferece apagar os volumes de dados, com
+  confirmação dupla (digitar o nome da stack) para evitar exclusão acidental.
+
 ## Canal do Portainer
 
 Durante a preparação da VPS, o instalador permite escolher o canal do Portainer:
@@ -72,6 +105,36 @@ No menu `Backup / Migração`:
 - instale a base na nova VPS;
 - importe o backup;
 - escolha se deseja manter domínios, trocar domínio base ou revisar domínio por domínio.
+
+## Desenvolvimento e testes
+
+O repositório roda `shellcheck` e uma suíte de testes `bats` a cada push e pull request
+via GitHub Actions (`.github/workflows/ci.yml`).
+
+Para rodar localmente:
+
+```bash
+# análise estática
+shellcheck -x -S warning installer.sh bootstrap.sh lib/*.sh recipes/*.sh
+
+# testes unitários dos módulos puros (sem Docker)
+bats test/
+```
+
+Os testes cobrem `lib/stack.sh`, `lib/state.sh`, `lib/dns.sh` e `lib/appdef.sh`.
+
+A estrutura do projeto:
+
+```text
+installer.sh          # ponto de entrada e menus
+lib/                  # módulos: ui, state, system, dns, stack, portainer, backup,
+                      #          dependencies, catalog, appdef
+recipes/              # receitas de instalação/atualização (incl. generic.sh)
+templates/            # composes das ferramentas nativas
+apps/                 # catálogo data-driven (app.env + stack.yml por app)
+test/                 # suíte bats
+docs/                 # documentação técnica
+```
 
 ## Observações de segurança
 

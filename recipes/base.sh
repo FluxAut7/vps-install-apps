@@ -20,6 +20,7 @@ recipe_base_install() {
 
   [[ -n "$portainer_domain" && -n "$portainer_user" && -n "$portainer_password" && -n "$network_name" && -n "$ssl_email" ]] \
     || fail "Campos obrigatórios não preenchidos."
+  dns_confirm_domain "$portainer_domain" || return 0
 
   local summary
   summary="Portainer: https://$portainer_domain
@@ -89,6 +90,7 @@ recipe_base_init_portainer() {
   ui_info "Inicializando usuário admin do Portainer..."
   local attempt response
   for attempt in 1 2 3 4 5 6; do
+    ui_info "Tentativa $attempt/6..."
     response="$(curl -sS -X POST "$api_url/api/users/admin/init" \
       -H "Content-Type: application/json" \
       -d "{\"Username\":\"$user\",\"Password\":\"$password\"}" || true)"

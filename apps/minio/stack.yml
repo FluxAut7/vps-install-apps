@@ -1,0 +1,39 @@
+version: "3.8"
+
+services:
+  minio:
+    image: __APP_IMAGE__
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: "__MINIO_ROOT_USER__"
+      MINIO_ROOT_PASSWORD: "__MINIO_ROOT_PASSWORD__"
+    volumes:
+      - __STACK_NAME___data:/data
+    networks:
+      - __NETWORK_NAME__
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=__NETWORK_NAME__"
+        - "traefik.http.routers.__STACK_NAME___console.rule=Host(`__APP_DOMAIN__`)"
+        - "traefik.http.routers.__STACK_NAME___console.entrypoints=websecure"
+        - "traefik.http.routers.__STACK_NAME___console.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.__STACK_NAME___console.service=__STACK_NAME___console"
+        - "traefik.http.services.__STACK_NAME___console.loadbalancer.server.port=9001"
+        - "traefik.http.routers.__STACK_NAME___s3.rule=Host(`__S3_DOMAIN__`)"
+        - "traefik.http.routers.__STACK_NAME___s3.entrypoints=websecure"
+        - "traefik.http.routers.__STACK_NAME___s3.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.__STACK_NAME___s3.service=__STACK_NAME___s3"
+        - "traefik.http.services.__STACK_NAME___s3.loadbalancer.server.port=9000"
+
+volumes:
+  __STACK_NAME___data:
+    name: __STACK_NAME___data
+
+networks:
+  __NETWORK_NAME__:
+    external: true

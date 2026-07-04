@@ -25,6 +25,7 @@ recipe_uptime_kuma_install() {
 
   domain="$(ui_input "Domínio do Uptime Kuma, ex: uptime.seudomínio.com.br" "")"
   [[ -n "$domain" ]] || fail "Domínio obrigatório."
+  dns_confirm_domain "$domain" || return 0
 
   stack_file="$(stack_path "$stack_name")"
   network_name="$(state_get NETWORK_NAME)"
@@ -36,11 +37,20 @@ recipe_uptime_kuma_install() {
     DOMAIN "$domain" \
     IMAGE "$image"
 
-  portainer_deploy_stack "$stack_name" "$stack_file"
+  local deploy_ok=1
+  portainer_deploy_stack "$stack_name" "$stack_file" || deploy_ok=0
   state_register_app "$stack_name" "$stack_name" "uptime-kuma" "$domain" "$image" "$stack_file"
   state_set UPTIME_KUMA_DOMAIN "$domain" "$APP_STATE_DIR/${stack_name}.env"
   state_set UPTIME_KUMA_IMAGE "$image" "$APP_STATE_DIR/${stack_name}.env"
   state_set UPTIME_KUMA_MAJOR_VERSION "$version" "$APP_STATE_DIR/${stack_name}.env"
+
+  if [[ "$deploy_ok" -eq 0 ]]; then
+    ui_warn "'$stack_name' foi registrada no inventário, mas os serviços não convergiram. Revise antes de usar."
+    ui_pause
+    return 0
+  fi
+
+  system_wait_https "$domain" 120 || true
 
   ui_success "Uptime Kuma instalado."
   echo "URL: https://$domain"

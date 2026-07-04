@@ -34,12 +34,19 @@ recipe_redis_install() {
     REDIS_IMAGE "$redis_image" \
     REDIS_PASSWORD "$password"
 
-  portainer_deploy_stack "$stack_name" "$stack_file"
+  local deploy_ok=1
+  portainer_deploy_stack "$stack_name" "$stack_file" || deploy_ok=0
   state_register_app "$stack_name" "$stack_name" "redis" "" "$redis_image" "$stack_file"
   state_set REDIS_TAG "$redis_tag" "$APP_STATE_DIR/${stack_name}.env"
   state_set REDIS_HOST "$service_name" "$APP_STATE_DIR/${stack_name}.env"
   state_set REDIS_PASSWORD "$password" "$APP_STATE_DIR/${stack_name}.env"
   state_set REDIS_URL "redis://:$password@$service_name:6379/0" "$APP_STATE_DIR/${stack_name}.env"
+
+  if [[ "$deploy_ok" -eq 0 ]]; then
+    ui_warn "'$stack_name' foi registrada no inventário, mas os serviços não convergiram. Revise antes de usar."
+    ui_pause
+    return 0
+  fi
 
   ui_success "Redis instalado."
   echo "Host: $service_name"

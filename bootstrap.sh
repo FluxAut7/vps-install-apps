@@ -7,7 +7,6 @@ set -Eeuo pipefail
 # Usage:
 #   bash <(curl -sSL https://vps-setup.fluxaut.com.br)
 
-PROJECT_NAME="vps-installer"
 DEFAULT_ARCHIVE_URL="https://github.com/FluxAut7/vps-install-apps/archive/refs/heads/main.tar.gz"
 ARCHIVE_URL="${VPS_INSTALLER_ARCHIVE_URL:-$DEFAULT_ARCHIVE_URL}"
 

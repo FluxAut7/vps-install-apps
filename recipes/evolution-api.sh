@@ -22,6 +22,7 @@ recipe_evolution_install() {
 
   domain="$(ui_input "Domínio da Evolution API, ex: evolution.seudomínio.com.br" "")"
   [[ -n "$domain" ]] || fail "Domínio obrigatório."
+  dns_confirm_domain "$domain" || return 0
 
   local pg_file pg_host pg_pass database
   pg_file="$(recipe_postgres_default_file)"
@@ -48,12 +49,21 @@ recipe_evolution_install() {
     POSTGRES_DATABASE "$database" \
     REDIS_PASSWORD "$redis_password"
 
-  portainer_deploy_stack "$stack_name" "$stack_file"
+  local deploy_ok=1
+  portainer_deploy_stack "$stack_name" "$stack_file" || deploy_ok=0
   state_register_app "$stack_name" "$stack_name" "evolution-api" "$domain" "$evolution_image" "$stack_file"
   state_set EVOLUTION_TAG "$evolution_tag" "$APP_STATE_DIR/${stack_name}.env"
   state_set EVOLUTION_API_KEY "$api_key" "$APP_STATE_DIR/${stack_name}.env"
   state_set POSTGRES_DATABASE "$database" "$APP_STATE_DIR/${stack_name}.env"
   state_set REDIS_PASSWORD "$redis_password" "$APP_STATE_DIR/${stack_name}.env"
+
+  if [[ "$deploy_ok" -eq 0 ]]; then
+    ui_warn "'$stack_name' foi registrada no inventário, mas os serviços não convergiram. Revise antes de usar."
+    ui_pause
+    return 0
+  fi
+
+  system_wait_https "$domain" 120 || true
 
   ui_success "Evolution API instalada."
   echo "URL: https://$domain"

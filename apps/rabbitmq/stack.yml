@@ -1,0 +1,32 @@
+version: "3.8"
+
+services:
+  rabbitmq:
+    image: __APP_IMAGE__
+    environment:
+      RABBITMQ_DEFAULT_USER: "__RABBITMQ_DEFAULT_USER__"
+      RABBITMQ_DEFAULT_PASS: "__RABBITMQ_DEFAULT_PASS__"
+    volumes:
+      - __STACK_NAME___data:/var/lib/rabbitmq
+    networks:
+      - __NETWORK_NAME__
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=__NETWORK_NAME__"
+        - "traefik.http.routers.__STACK_NAME___console.rule=Host(`__APP_DOMAIN__`)"
+        - "traefik.http.routers.__STACK_NAME___console.entrypoints=websecure"
+        - "traefik.http.routers.__STACK_NAME___console.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.__STACK_NAME___console.loadbalancer.server.port=15672"
+
+volumes:
+  __STACK_NAME___data:
+    name: __STACK_NAME___data
+
+networks:
+  __NETWORK_NAME__:
+    external: true

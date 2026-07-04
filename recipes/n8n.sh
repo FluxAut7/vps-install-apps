@@ -26,6 +26,8 @@ recipe_n8n_install() {
   editor_domain="$(ui_input "Domínio do editor n8n, ex: n8n.seudomínio.com.br" "")"
   webhook_domain="$(ui_input "Domínio dos webhooks n8n, ex: webhook.seudomínio.com.br" "$editor_domain")"
   [[ -n "$editor_domain" && -n "$webhook_domain" ]] || fail "Domínios obrigatórios."
+  dns_confirm_domain "$editor_domain" || return 0
+  [[ "$webhook_domain" == "$editor_domain" ]] || dns_confirm_domain "$webhook_domain" || return 0
 
   local pg_file pg_host pg_pass
   pg_file="$(recipe_postgres_default_file)"
@@ -56,7 +58,8 @@ recipe_n8n_install() {
     N8N_ENCRYPTION_KEY "$encryption_key" \
     REDIS_PASSWORD "$redis_password"
 
-  portainer_deploy_stack "$stack_name" "$stack_file"
+  local deploy_ok=1
+  portainer_deploy_stack "$stack_name" "$stack_file" || deploy_ok=0
   state_register_app "$stack_name" "$stack_name" "n8n" "$editor_domain" "$n8n_image" "$stack_file"
   state_set WEBHOOK_DOMAIN "$webhook_domain" "$APP_STATE_DIR/${stack_name}.env"
   state_set N8N_VERSION "$n8n_version" "$APP_STATE_DIR/${stack_name}.env"
@@ -66,6 +69,14 @@ recipe_n8n_install() {
   state_set N8N_RUNNERS_AUTH_TOKEN "$runners_auth_token" "$APP_STATE_DIR/${stack_name}.env"
   state_set POSTGRES_DATABASE "$database" "$APP_STATE_DIR/${stack_name}.env"
   state_set REDIS_PASSWORD "$redis_password" "$APP_STATE_DIR/${stack_name}.env"
+
+  if [[ "$deploy_ok" -eq 0 ]]; then
+    ui_warn "'$stack_name' foi registrada no inventário, mas os serviços não convergiram. Revise antes de usar."
+    ui_pause
+    return 0
+  fi
+
+  system_wait_https "$editor_domain" 120 || true
 
   ui_success "n8n instalado."
   echo "Editor: https://$editor_domain"

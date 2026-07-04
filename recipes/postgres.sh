@@ -35,13 +35,20 @@ recipe_postgres_install() {
     POSTGRES_IMAGE "$postgres_image" \
     POSTGRES_PASSWORD "$password"
 
-  portainer_deploy_stack "$stack_name" "$stack_file"
+  local deploy_ok=1
+  portainer_deploy_stack "$stack_name" "$stack_file" || deploy_ok=0
   state_register_app "$stack_name" "$stack_name" "postgres" "" "$postgres_image" "$stack_file"
   state_set POSTGRES_TAG "$postgres_tag" "$APP_STATE_DIR/${stack_name}.env"
   state_set POSTGRES_HOST "$service_name" "$APP_STATE_DIR/${stack_name}.env"
   state_set POSTGRES_USER "postgres" "$APP_STATE_DIR/${stack_name}.env"
   state_set POSTGRES_PASSWORD "$password" "$APP_STATE_DIR/${stack_name}.env"
   state_set POSTGRES_URL "postgresql://postgres:$password@$service_name:5432/postgres" "$APP_STATE_DIR/${stack_name}.env"
+
+  if [[ "$deploy_ok" -eq 0 ]]; then
+    ui_warn "'$stack_name' foi registrada no inventário, mas os serviços não convergiram. Revise antes de usar."
+    ui_pause
+    return 0
+  fi
 
   ui_success "PostgreSQL instalado."
   echo "Host: $service_name"
@@ -75,13 +82,16 @@ recipe_postgres_install_default() {
     POSTGRES_IMAGE "$postgres_image" \
     POSTGRES_PASSWORD "$password"
 
-  portainer_deploy_stack "$stack_name" "$stack_file"
+  local deploy_ok=1
+  portainer_deploy_stack "$stack_name" "$stack_file" || deploy_ok=0
   state_register_app "$stack_name" "$stack_name" "postgres" "" "$postgres_image" "$stack_file"
   state_set POSTGRES_TAG "$postgres_tag" "$APP_STATE_DIR/${stack_name}.env"
   state_set POSTGRES_HOST "$service_name" "$APP_STATE_DIR/${stack_name}.env"
   state_set POSTGRES_USER "postgres" "$APP_STATE_DIR/${stack_name}.env"
   state_set POSTGRES_PASSWORD "$password" "$APP_STATE_DIR/${stack_name}.env"
   state_set POSTGRES_URL "postgresql://postgres:$password@$service_name:5432/postgres" "$APP_STATE_DIR/${stack_name}.env"
+
+  [[ "$deploy_ok" -eq 1 ]] || fail "PostgreSQL padrão não convergiu. Verifique 'docker service ls' antes de continuar."
 }
 
 recipe_postgres_default_file() {

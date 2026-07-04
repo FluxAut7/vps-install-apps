@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  metabase:
+    image: __APP_IMAGE__
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_HOST: "__POSTGRES_HOST__"
+      MB_DB_PORT: "5432"
+      MB_DB_DBNAME: "__POSTGRES_DATABASE__"
+      MB_DB_USER: postgres
+      MB_DB_PASS: "__POSTGRES_PASSWORD__"
+    networks:
+      - __NETWORK_NAME__
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=__NETWORK_NAME__"
+        - "traefik.http.routers.__STACK_NAME__.rule=Host(`__APP_DOMAIN__`)"
+        - "traefik.http.routers.__STACK_NAME__.entrypoints=websecure"
+        - "traefik.http.routers.__STACK_NAME__.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.__STACK_NAME__.loadbalancer.server.port=3000"
+
+networks:
+  __NETWORK_NAME__:
+    external: true

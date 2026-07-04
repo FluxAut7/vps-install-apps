@@ -1,0 +1,36 @@
+version: "3.8"
+
+services:
+  langflow:
+    image: __APP_IMAGE__
+    environment:
+      LANGFLOW_DATABASE_URL: "postgresql://postgres:__POSTGRES_PASSWORD__@__POSTGRES_HOST__:5432/__POSTGRES_DATABASE__"
+      LANGFLOW_AUTO_LOGIN: "false"
+      LANGFLOW_SUPERUSER: "__LANGFLOW_SUPERUSER__"
+      LANGFLOW_SUPERUSER_PASSWORD: "__LANGFLOW_SUPERUSER_PASSWORD__"
+      LANGFLOW_SECRET_KEY: "__LANGFLOW_SECRET_KEY__"
+      LANGFLOW_NEW_USER_IS_ACTIVE: "false"
+    volumes:
+      - __STACK_NAME___data:/app/langflow
+    networks:
+      - __NETWORK_NAME__
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=__NETWORK_NAME__"
+        - "traefik.http.routers.__STACK_NAME__.rule=Host(`__APP_DOMAIN__`)"
+        - "traefik.http.routers.__STACK_NAME__.entrypoints=websecure"
+        - "traefik.http.routers.__STACK_NAME__.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.__STACK_NAME__.loadbalancer.server.port=7860"
+
+volumes:
+  __STACK_NAME___data:
+    name: __STACK_NAME___data
+
+networks:
+  __NETWORK_NAME__:
+    external: true

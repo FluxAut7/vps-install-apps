@@ -214,7 +214,7 @@ recipe_update_generic() {
   network_name="$(state_get NETWORK_NAME)"
   stack_file="$(stack_path "$STACK_NAME")"
 
-  local -a render_args=(STACK_NAME "$STACK_NAME" NETWORK_NAME "$network_name" APP_IMAGE "$app_image")
+  local -a render_args=(STACK_NAME "$STACK_NAME" NETWORK_NAME "$network_name" APP_IMAGE "$app_image" APP_IMAGE_TAG "$app_tag")
   local item var value
 
   if [[ -n "$APP_DOMAINS" ]]; then

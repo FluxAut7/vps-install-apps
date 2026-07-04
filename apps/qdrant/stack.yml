@@ -1,0 +1,31 @@
+version: "3.8"
+
+services:
+  qdrant:
+    image: __APP_IMAGE__
+    environment:
+      QDRANT__SERVICE__API_KEY: "__QDRANT_API_KEY__"
+    volumes:
+      - __STACK_NAME___data:/qdrant/storage
+    networks:
+      - __NETWORK_NAME__
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=__NETWORK_NAME__"
+        - "traefik.http.routers.__STACK_NAME__.rule=Host(`__APP_DOMAIN__`)"
+        - "traefik.http.routers.__STACK_NAME__.entrypoints=websecure"
+        - "traefik.http.routers.__STACK_NAME__.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.__STACK_NAME__.loadbalancer.server.port=6333"
+
+volumes:
+  __STACK_NAME___data:
+    name: __STACK_NAME___data
+
+networks:
+  __NETWORK_NAME__:
+    external: true

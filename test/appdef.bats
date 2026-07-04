@@ -27,6 +27,19 @@ setup() {
   [ "$status" -ne 0 ]
 }
 
+@test "todos os manifestos do catálogo carregam com campos obrigatórios e template" {
+  local slug
+  for slug in $(appdef_list_slugs); do
+    run appdef_load "$slug"
+    [ "$status" -eq 0 ] || { echo "falhou ao carregar: $slug"; return 1; }
+    appdef_load "$slug"
+    [ -n "$APP_LABEL" ] || { echo "$slug sem APP_LABEL"; return 1; }
+    [ -n "$APP_IMAGE_REPO" ] || { echo "$slug sem APP_IMAGE_REPO"; return 1; }
+    [ -n "$APP_TESTED_TAGS" ] || { echo "$slug sem APP_TESTED_TAGS"; return 1; }
+    [ -f "$(appdef_template_path "$slug")" ] || { echo "$slug sem stack.yml"; return 1; }
+  done
+}
+
 @test "appdef_image builds repo:tag" {
   appdef_load "minio"
   result="$(appdef_image "RELEASE.test")"

@@ -1,0 +1,37 @@
+version: "3.8"
+
+services:
+  baserow:
+    image: __APP_IMAGE__
+    environment:
+      BASEROW_PUBLIC_URL: "https://__APP_DOMAIN__"
+      BASEROW_SECRET_KEY: "__BASEROW_SECRET_KEY__"
+      DATABASE_HOST: "__POSTGRES_HOST__"
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: "__POSTGRES_DATABASE__"
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: "__POSTGRES_PASSWORD__"
+    volumes:
+      - __STACK_NAME___data:/baserow/data
+    networks:
+      - __NETWORK_NAME__
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=__NETWORK_NAME__"
+        - "traefik.http.routers.__STACK_NAME__.rule=Host(`__APP_DOMAIN__`)"
+        - "traefik.http.routers.__STACK_NAME__.entrypoints=websecure"
+        - "traefik.http.routers.__STACK_NAME__.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.__STACK_NAME__.loadbalancer.server.port=80"
+
+volumes:
+  __STACK_NAME___data:
+    name: __STACK_NAME___data
+
+networks:
+  __NETWORK_NAME__:
+    external: true

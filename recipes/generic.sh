@@ -35,7 +35,7 @@ recipe_generic_install() {
 
   local app_file="$APP_STATE_DIR/${stack_name}.env"
   local first_domain=""
-  local -a render_args=(STACK_NAME "$stack_name" NETWORK_NAME "$network_name" APP_IMAGE "$app_image")
+  local -a render_args=(STACK_NAME "$stack_name" NETWORK_NAME "$network_name" APP_IMAGE "$app_image" APP_IMAGE_TAG "$app_tag")
 
   local item var prompt value
 

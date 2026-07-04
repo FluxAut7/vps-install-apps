@@ -1,0 +1,88 @@
+version: "3.8"
+
+services:
+  mysql:
+    image: mysql:8.0
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: "__MYSQL_ROOT_PASSWORD__"
+      MYSQL_DATABASE: mautic
+    volumes:
+      - __STACK_NAME___mysql:/var/lib/mysql
+    networks:
+      - __NETWORK_NAME__
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+
+  mautic:
+    image: __APP_IMAGE__
+    environment:
+      MAUTIC_DB_HOST: mysql
+      MAUTIC_DB_PORT: "3306"
+      MAUTIC_DB_NAME: mautic
+      MAUTIC_DB_USER: root
+      MAUTIC_DB_PASSWORD: "__MYSQL_ROOT_PASSWORD__"
+      MAUTIC_ADMIN_EMAIL: "__MAUTIC_ADMIN_EMAIL__"
+      MAUTIC_ADMIN_USERNAME: "__MAUTIC_ADMIN_USERNAME__"
+      MAUTIC_ADMIN_PASSWORD: "__MAUTIC_ADMIN_PASSWORD__"
+      MAUTIC_URL: "https://__APP_DOMAIN__"
+      MAUTIC_TRUSTED_PROXIES: '["0.0.0.0/0"]'
+      DOCKER_MAUTIC_ROLE: mautic_web
+    volumes:
+      - __STACK_NAME___config:/var/www/html/config
+      - __STACK_NAME___media:/var/www/html/docroot/media
+      - __STACK_NAME___logs:/var/www/html/var/logs
+    networks:
+      - __NETWORK_NAME__
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=__NETWORK_NAME__"
+        - "traefik.http.routers.__STACK_NAME__.rule=Host(`__APP_DOMAIN__`)"
+        - "traefik.http.routers.__STACK_NAME__.entrypoints=websecure"
+        - "traefik.http.routers.__STACK_NAME__.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.__STACK_NAME__.loadbalancer.server.port=80"
+        - "traefik.http.services.__STACK_NAME__.loadbalancer.passHostHeader=true"
+
+  mautic_cron:
+    image: __APP_IMAGE__
+    environment:
+      MAUTIC_DB_HOST: mysql
+      MAUTIC_DB_PORT: "3306"
+      MAUTIC_DB_NAME: mautic
+      MAUTIC_DB_USER: root
+      MAUTIC_DB_PASSWORD: "__MYSQL_ROOT_PASSWORD__"
+      MAUTIC_URL: "https://__APP_DOMAIN__"
+      DOCKER_MAUTIC_ROLE: mautic_cron
+    volumes:
+      - __STACK_NAME___config:/var/www/html/config
+      - __STACK_NAME___media:/var/www/html/docroot/media
+      - __STACK_NAME___logs:/var/www/html/var/logs
+    networks:
+      - __NETWORK_NAME__
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+
+volumes:
+  __STACK_NAME___mysql:
+    name: __STACK_NAME___mysql
+  __STACK_NAME___config:
+    name: __STACK_NAME___config
+  __STACK_NAME___media:
+    name: __STACK_NAME___media
+  __STACK_NAME___logs:
+    name: __STACK_NAME___logs
+
+networks:
+  __NETWORK_NAME__:
+    external: true

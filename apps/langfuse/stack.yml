@@ -1,0 +1,31 @@
+version: "3.8"
+
+services:
+  langfuse:
+    image: __APP_IMAGE__
+    environment:
+      DATABASE_URL: "postgresql://postgres:__POSTGRES_PASSWORD__@__POSTGRES_HOST__:5432/__POSTGRES_DATABASE__"
+      NEXTAUTH_URL: "https://__APP_DOMAIN__"
+      NEXTAUTH_SECRET: "__NEXTAUTH_SECRET__"
+      SALT: "__SALT__"
+      ENCRYPTION_KEY: "__ENCRYPTION_KEY__"
+      TELEMETRY_ENABLED: "true"
+      LANGFUSE_DEFAULT_PROJECT_ROLE: ADMIN
+    networks:
+      - __NETWORK_NAME__
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=__NETWORK_NAME__"
+        - "traefik.http.routers.__STACK_NAME__.rule=Host(`__APP_DOMAIN__`)"
+        - "traefik.http.routers.__STACK_NAME__.entrypoints=websecure"
+        - "traefik.http.routers.__STACK_NAME__.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.__STACK_NAME__.loadbalancer.server.port=3000"
+
+networks:
+  __NETWORK_NAME__:
+    external: true

@@ -54,9 +54,26 @@ A receita genérica (`recipes/generic.sh`) interpreta o manifesto, coleta domín
 entradas, gera segredos, renderiza o template e publica via Portainer. Apps do catálogo
 aparecem no painel, no menu de atualização e no backup como as demais ferramentas.
 
-Apps já incluídos: **MinIO** e **RabbitMQ**. Para adicionar outro, basta criar
-`apps/<slug>/app.env` e `apps/<slug>/stack.yml` — nenhuma alteração de código é
-necessária.
+Apps já incluídos no catálogo:
+
+| App | Categoria | Dependências |
+|---|---|---|
+| MinIO | Object storage S3 | — |
+| RabbitMQ | Broker de filas | — |
+| Qdrant | Banco vetorial | — |
+| PostgreSQL + pgvector | Banco vetorial | — (banco interno) |
+| Metabase | BI / dashboards | PostgreSQL padrão |
+| Baserow | Planilha-banco no-code | PostgreSQL padrão |
+| Typebot | Chatbots (builder + viewer) | PostgreSQL padrão |
+| Langfuse | Observabilidade de LLM (v2) | PostgreSQL padrão |
+| Langflow | Fluxos/agentes com LLM | PostgreSQL padrão |
+| Mautic | Automação de marketing | MySQL próprio (na stack) |
+
+Para adicionar outro, basta criar `apps/<slug>/app.env` e `apps/<slug>/stack.yml` —
+nenhuma alteração de código é necessária. Placeholders disponíveis no template:
+`__STACK_NAME__`, `__NETWORK_NAME__`, `__APP_IMAGE__`, `__APP_IMAGE_TAG__`, os campos
+declarados no manifesto (domínios, entradas, segredos) e, quando aplicável,
+`__POSTGRES_HOST__`/`__POSTGRES_PASSWORD__`/`__POSTGRES_DATABASE__` e `__REDIS_PASSWORD__`.
 
 ## Verificações de segurança e confiabilidade
 

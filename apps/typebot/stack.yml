@@ -1,0 +1,53 @@
+version: "3.8"
+
+services:
+  builder:
+    image: baptistearno/typebot-builder:__APP_IMAGE_TAG__
+    environment:
+      DATABASE_URL: "postgresql://postgres:__POSTGRES_PASSWORD__@__POSTGRES_HOST__:5432/__POSTGRES_DATABASE__"
+      ENCRYPTION_SECRET: "__ENCRYPTION_SECRET__"
+      AUTH_TRUST_HOST: "true"
+      NEXTAUTH_URL: "https://__APP_DOMAIN__"
+      NEXT_PUBLIC_VIEWER_URL: "https://__VIEWER_DOMAIN__"
+      DEFAULT_WORKSPACE_PLAN: UNLIMITED
+      DISABLE_SIGNUP: "false"
+    networks:
+      - __NETWORK_NAME__
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=__NETWORK_NAME__"
+        - "traefik.http.routers.__STACK_NAME___builder.rule=Host(`__APP_DOMAIN__`)"
+        - "traefik.http.routers.__STACK_NAME___builder.entrypoints=websecure"
+        - "traefik.http.routers.__STACK_NAME___builder.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.__STACK_NAME___builder.loadbalancer.server.port=3000"
+
+  viewer:
+    image: baptistearno/typebot-viewer:__APP_IMAGE_TAG__
+    environment:
+      DATABASE_URL: "postgresql://postgres:__POSTGRES_PASSWORD__@__POSTGRES_HOST__:5432/__POSTGRES_DATABASE__"
+      ENCRYPTION_SECRET: "__ENCRYPTION_SECRET__"
+      NEXTAUTH_URL: "https://__APP_DOMAIN__"
+      NEXT_PUBLIC_VIEWER_URL: "https://__VIEWER_DOMAIN__"
+    networks:
+      - __NETWORK_NAME__
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=__NETWORK_NAME__"
+        - "traefik.http.routers.__STACK_NAME___viewer.rule=Host(`__VIEWER_DOMAIN__`)"
+        - "traefik.http.routers.__STACK_NAME___viewer.entrypoints=websecure"
+        - "traefik.http.routers.__STACK_NAME___viewer.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.__STACK_NAME___viewer.loadbalancer.server.port=3000"
+
+networks:
+  __NETWORK_NAME__:
+    external: true

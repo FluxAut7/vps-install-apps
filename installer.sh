@@ -29,14 +29,6 @@ export VPS_INSTALLER_SOURCE_DIR="$SCRIPT_DIR"
 . "$SCRIPT_DIR/recipes/base.sh"
 # shellcheck source=recipes/postgres.sh
 . "$SCRIPT_DIR/recipes/postgres.sh"
-# shellcheck source=recipes/redis.sh
-. "$SCRIPT_DIR/recipes/redis.sh"
-# shellcheck source=recipes/n8n.sh
-. "$SCRIPT_DIR/recipes/n8n.sh"
-# shellcheck source=recipes/uptime-kuma.sh
-. "$SCRIPT_DIR/recipes/uptime-kuma.sh"
-# shellcheck source=recipes/evolution-api.sh
-. "$SCRIPT_DIR/recipes/evolution-api.sh"
 # shellcheck source=recipes/update.sh
 . "$SCRIPT_DIR/recipes/update.sh"
 # shellcheck source=recipes/generic.sh
@@ -58,11 +50,6 @@ installer_tool_label() {
   case "$app_type:$app_name" in
     base:traefik) printf '%s' 'Traefik' ;;
     base:portainer) printf '%s' 'Portainer' ;;
-    postgres:*) printf '%s' 'PostgreSQL' ;;
-    redis:*) printf '%s' 'Redis' ;;
-    n8n:*) printf '%s' 'n8n' ;;
-    uptime-kuma:*) printf '%s' 'Uptime Kuma' ;;
-    evolution-api:*) printf '%s' 'Evolution API' ;;
     *) printf '%s' "$(appdef_label_or_default "$app_type" "$app_name")" ;;
   esac
 }
@@ -77,11 +64,7 @@ installer_tool_version() {
   case "$app_type:$app_name" in
     base:portainer) printf '%s' "${PORTAINER_CHANNEL:-${APP_IMAGE##*:}}" ;;
     base:traefik) printf '%s' "${TRAEFIK_IMAGE##*:}" ;;
-    postgres:*) printf '%s' "${POSTGRES_TAG:-${APP_IMAGE##*:}}" ;;
-    redis:*) printf '%s' "${REDIS_TAG:-${APP_IMAGE##*:}}" ;;
-    n8n:*) printf '%s' "${N8N_VERSION:-${APP_IMAGE##*:}}" ;;
     uptime-kuma:*) printf 'v%s' "${UPTIME_KUMA_MAJOR_VERSION:-${APP_IMAGE##*:}}" ;;
-    evolution-api:*) printf '%s' "${EVOLUTION_TAG:-${APP_IMAGE##*:}}" ;;
     *) printf '%s' "${APP_IMAGE##*:}" ;;
   esac
 }
@@ -1073,33 +1056,42 @@ vps_menu() {
 }
 
 tools_menu() {
+  local -a slugs=()
+  local slug
+  while read -r slug; do
+    [[ -n "$slug" ]] || continue
+    slugs+=("$slug")
+  done < <(appdef_list_slugs | sort)
+
   while true; do
+    local -a items=()
+    local -A keymap=()
+    local n=1
+    items+=("i" "Importar stack existente||Detecta credenciais, senhas e chaves visíveis na stack antes de confirmar a adoção. Não exige login no Portainer.")
+    for slug in "${slugs[@]}"; do
+      appdef_load "$slug"
+      items+=("$n" "$APP_LABEL||$APP_DESCRIPTION")
+      keymap["$n"]="$slug"
+      n=$((n + 1))
+    done
+    items+=("u" "Atualizar ferramenta instalada||Reimplanta uma stack instalada e aplica a versão testada.")
+    items+=("r" "Remover stack||Exclui uma stack pelo Portainer, com opção de apagar os volumes de dados.")
+    items+=("c" "Ver credenciais de uma ferramenta||Mostra URLs, usuários e senhas de um app instalado.")
+
     local choice
-    choice="$(installer_menu_with_summary "Ferramentas" \
-      "1" "Importar stack existente||Detecta credenciais, senhas e chaves visíveis na stack antes de confirmar a adoção. Não exige login no Portainer." \
-      "2" "Instalar PostgreSQL||Cria a stack do banco com volume persistente." \
-      "3" "Instalar Redis||Cria a stack do cache e fila com persistência." \
-      "4" "Instalar n8n||Publica editor, webhook, worker e runners externos." \
-      "5" "Instalar Uptime Kuma||Publica monitoramento com escolha entre v1 e v2." \
-      "6" "Instalar Evolution API||Publica a API com Postgres e Redis internos." \
-      "7" "Atualizar ferramenta instalada||Reimplanta a stack e aplica a versão testada." \
-      "8" "Remover stack||Exclui uma stack pelo Portainer, com opção de apagar os volumes de dados." \
-      "9" "Ver credenciais de uma ferramenta||Mostra URLs, usuários e senhas de um app instalado." \
-      "10" "Catálogo de ferramentas||Instala apps adicionais definidos por manifesto (MinIO, RabbitMQ, ...)." \
-      "0" "Voltar||Retorna ao menu principal.")"
+    choice="$(installer_menu_with_summary "Ferramentas" "${items[@]}" "0" "Voltar||Retorna ao menu principal.")"
 
     case "$choice" in
-      1) installer_import_existing_stack_interactive ;;
-      2) recipe_postgres_install ;;
-      3) recipe_redis_install ;;
-      4) recipe_n8n_install ;;
-      5) recipe_uptime_kuma_install ;;
-      6) recipe_evolution_install ;;
-      7) recipe_update_installed_tool ;;
-      8) remove_stack_menu ;;
-      9) installer_show_credentials ;;
-      10) recipe_generic_catalog_menu ;;
+      i) installer_import_existing_stack_interactive ;;
+      u) recipe_update_installed_tool ;;
+      r) remove_stack_menu ;;
+      c) installer_show_credentials ;;
       0|"") return 0 ;;
+      *)
+        if [[ -n "${keymap[$choice]:-}" ]]; then
+          recipe_generic_install "${keymap[$choice]}"
+        fi
+        ;;
     esac
   done
 }

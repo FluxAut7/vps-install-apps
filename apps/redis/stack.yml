@@ -1,8 +1,8 @@
 version: "3.8"
 
 services:
-  __SERVICE_NAME__:
-    image: __REDIS_IMAGE__
+  __STACK_NAME__:
+    image: __APP_IMAGE__
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "__REDIS_PASSWORD__"]
     volumes:
       - __STACK_NAME___data:/data

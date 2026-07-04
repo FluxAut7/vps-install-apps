@@ -1,50 +1,6 @@
 #!/usr/bin/env bash
-
-dependencies_describe() {
-  local app="$1"
-  case "$app" in
-    postgres|redis|uptime-kuma)
-      cat <<'EOF'
-Dependências:
-- Base da VPS instalada: Docker, Swarm, rede interna, Traefik e Portainer
-- Portainer API configurada
-EOF
-      ;;
-    n8n)
-      cat <<'EOF'
-Dependências:
-- Base da VPS instalada: Docker, Swarm, rede interna, Traefik e Portainer
-- Portainer API configurada
-- PostgreSQL padrão: instalado automaticamente se ainda não existir
-- Redis: incluído dentro da própria stack do n8n
-- n8n runners: incluído como serviço obrigatório na stack do n8n
-EOF
-      ;;
-    evolution-api)
-      cat <<'EOF'
-Dependências:
-- Base da VPS instalada: Docker, Swarm, rede interna, Traefik e Portainer
-- Portainer API configurada
-- PostgreSQL padrão: instalado automaticamente se ainda não existir
-- Redis: incluido dentro da propria stack da Evolution API
-EOF
-      ;;
-    *)
-      cat <<'EOF'
-Dependências:
-- Base da VPS instalada: Docker, Swarm, rede interna, Traefik e Portainer
-- Portainer API configurada
-EOF
-      ;;
-  esac
-}
-
-dependencies_confirm() {
-  local app="$1"
-  local body
-  body="$(dependencies_describe "$app")"
-  ui_confirm_values "Mapa de dependencias" "$body" || return 1
-}
+# A descrição de dependências por app agora vem do manifesto
+# (appdef_dependencies_text, em lib/appdef.sh). Aqui fica só a checagem da base.
 
 dependencies_require_base() {
   system_require_docker

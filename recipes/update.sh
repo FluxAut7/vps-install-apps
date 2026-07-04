@@ -58,146 +58,6 @@ recipe_update_portainer() {
   state_set PORTAINER_AGENT_IMAGE "$agent_image" "$app_file"
 }
 
-recipe_update_postgres() {
-  local app_file="$1"
-  state_source "$app_file"
-
-  local postgres_tag postgres_image network_name service_name stack_file
-  postgres_tag="$(catalog_select_postgres_tag "${POSTGRES_TAG:-${APP_IMAGE##*:}}")"
-  postgres_image="$(catalog_postgres_image "$postgres_tag")"
-  network_name="$(state_get NETWORK_NAME)"
-  service_name="${POSTGRES_HOST:-$STACK_NAME}"
-  stack_file="$(stack_path "$STACK_NAME")"
-
-  stack_render "$VPS_INSTALLER_SOURCE_DIR/templates/postgres.yml" "$stack_file" \
-    STACK_NAME "$STACK_NAME" \
-    SERVICE_NAME "$service_name" \
-    NETWORK_NAME "$network_name" \
-    POSTGRES_IMAGE "$postgres_image" \
-    POSTGRES_PASSWORD "$POSTGRES_PASSWORD"
-
-  recipe_update_apply_stack "$STACK_NAME" "$stack_file"
-  state_set APP_IMAGE "$postgres_image" "$app_file"
-  state_set POSTGRES_TAG "$postgres_tag" "$app_file"
-}
-
-recipe_update_redis() {
-  local app_file="$1"
-  state_source "$app_file"
-
-  local redis_tag redis_image network_name service_name stack_file
-  redis_tag="$(catalog_select_redis_tag "${REDIS_TAG:-${APP_IMAGE##*:}}")"
-  redis_image="$(catalog_redis_image "$redis_tag")"
-  network_name="$(state_get NETWORK_NAME)"
-  service_name="${REDIS_HOST:-$STACK_NAME}"
-  stack_file="$(stack_path "$STACK_NAME")"
-
-  stack_render "$VPS_INSTALLER_SOURCE_DIR/templates/redis.yml" "$stack_file" \
-    STACK_NAME "$STACK_NAME" \
-    SERVICE_NAME "$service_name" \
-    NETWORK_NAME "$network_name" \
-    REDIS_IMAGE "$redis_image" \
-    REDIS_PASSWORD "$REDIS_PASSWORD"
-
-  recipe_update_apply_stack "$STACK_NAME" "$stack_file"
-  state_set APP_IMAGE "$redis_image" "$app_file"
-  state_set REDIS_TAG "$redis_tag" "$app_file"
-}
-
-recipe_update_n8n() {
-  local app_file="$1"
-  state_source "$app_file"
-
-  local n8n_version n8n_image n8n_runners_image network_name stack_file pg_file pg_host pg_pass
-  n8n_version="$(catalog_select_n8n_version "${N8N_VERSION:-${APP_IMAGE##*:}}")"
-  n8n_image="$(catalog_n8n_image "$n8n_version")"
-  n8n_runners_image="$(catalog_n8n_runners_image "$n8n_version")"
-  network_name="$(state_get NETWORK_NAME)"
-  stack_file="$(stack_path "$STACK_NAME")"
-  pg_file="$(recipe_postgres_default_file)"
-  pg_host="$(state_get POSTGRES_HOST "$pg_file")"
-  pg_pass="$(state_get POSTGRES_PASSWORD "$pg_file")"
-
-  [[ -n "${APP_DOMAIN:-}" && -n "${WEBHOOK_DOMAIN:-}" && -n "${POSTGRES_DATABASE:-}" && -n "${N8N_ENCRYPTION_KEY:-}" && -n "${N8N_RUNNERS_AUTH_TOKEN:-}" && -n "${REDIS_PASSWORD:-}" ]] \
-    || fail "Estado local incompleto para atualizar o n8n."
-
-  stack_render "$VPS_INSTALLER_SOURCE_DIR/templates/n8n.yml" "$stack_file" \
-    STACK_NAME "$STACK_NAME" \
-    NETWORK_NAME "$network_name" \
-    EDITOR_DOMAIN "$APP_DOMAIN" \
-    WEBHOOK_DOMAIN "$WEBHOOK_DOMAIN" \
-    N8N_IMAGE "$n8n_image" \
-    N8N_RUNNERS_IMAGE "$n8n_runners_image" \
-    N8N_RUNNERS_AUTH_TOKEN "$N8N_RUNNERS_AUTH_TOKEN" \
-    POSTGRES_HOST "$pg_host" \
-    POSTGRES_PASSWORD "$pg_pass" \
-    POSTGRES_DATABASE "$POSTGRES_DATABASE" \
-    N8N_ENCRYPTION_KEY "$N8N_ENCRYPTION_KEY" \
-    REDIS_PASSWORD "$REDIS_PASSWORD"
-
-  recipe_update_apply_stack "$STACK_NAME" "$stack_file"
-  state_set APP_IMAGE "$n8n_image" "$app_file"
-  state_set N8N_VERSION "$n8n_version" "$app_file"
-  state_set N8N_IMAGE "$n8n_image" "$app_file"
-  state_set N8N_RUNNERS_IMAGE "$n8n_runners_image" "$app_file"
-}
-
-recipe_update_uptime_kuma() {
-  local app_file="$1"
-  state_source "$app_file"
-
-  local major image network_name stack_file
-  major="$(catalog_select_uptime_kuma_major "${UPTIME_KUMA_MAJOR_VERSION:-1}")"
-  image="$(catalog_uptime_kuma_image "$major")"
-  network_name="$(state_get NETWORK_NAME)"
-  stack_file="$(stack_path "$STACK_NAME")"
-
-  [[ -n "${APP_DOMAIN:-}" ]] || fail "Estado local incompleto para atualizar o Uptime Kuma."
-
-  stack_render "$VPS_INSTALLER_SOURCE_DIR/templates/uptime-kuma.yml" "$stack_file" \
-    STACK_NAME "$STACK_NAME" \
-    NETWORK_NAME "$network_name" \
-    DOMAIN "$APP_DOMAIN" \
-    IMAGE "$image"
-
-  recipe_update_apply_stack "$STACK_NAME" "$stack_file"
-  state_set APP_IMAGE "$image" "$app_file"
-  state_set UPTIME_KUMA_IMAGE "$image" "$app_file"
-  state_set UPTIME_KUMA_MAJOR_VERSION "$major" "$app_file"
-}
-
-recipe_update_evolution_api() {
-  local app_file="$1"
-  state_source "$app_file"
-
-  local evolution_tag evolution_image network_name stack_file pg_file pg_host pg_pass
-  evolution_tag="$(catalog_select_evolution_tag "${EVOLUTION_TAG:-${APP_IMAGE##*:}}")"
-  evolution_image="$(catalog_evolution_image "$evolution_tag")"
-  network_name="$(state_get NETWORK_NAME)"
-  stack_file="$(stack_path "$STACK_NAME")"
-  pg_file="$(recipe_postgres_default_file)"
-  pg_host="$(state_get POSTGRES_HOST "$pg_file")"
-  pg_pass="$(state_get POSTGRES_PASSWORD "$pg_file")"
-
-  [[ -n "${APP_DOMAIN:-}" && -n "${EVOLUTION_API_KEY:-}" && -n "${POSTGRES_DATABASE:-}" && -n "${REDIS_PASSWORD:-}" ]] \
-    || fail "Estado local incompleto para atualizar a Evolution API."
-
-  stack_render "$VPS_INSTALLER_SOURCE_DIR/templates/evolution-api.yml" "$stack_file" \
-    STACK_NAME "$STACK_NAME" \
-    NETWORK_NAME "$network_name" \
-    DOMAIN "$APP_DOMAIN" \
-    EVOLUTION_IMAGE "$evolution_image" \
-    API_KEY "$EVOLUTION_API_KEY" \
-    POSTGRES_HOST "$pg_host" \
-    POSTGRES_PASSWORD "$pg_pass" \
-    POSTGRES_DATABASE "$POSTGRES_DATABASE" \
-    REDIS_PASSWORD "$REDIS_PASSWORD"
-
-  recipe_update_apply_stack "$STACK_NAME" "$stack_file"
-  state_set APP_IMAGE "$evolution_image" "$app_file"
-  state_set EVOLUTION_TAG "$evolution_tag" "$app_file"
-}
-
 recipe_update_generic() {
   local app_file="$1"
   state_source "$app_file"
@@ -288,21 +148,6 @@ recipe_update_installed_tool() {
           continue
         fi
         ;;
-      postgres)
-        desc="PostgreSQL||Reimplanta a stack e aplica a tag testada escolhida."
-        ;;
-      redis)
-        desc="Redis||Reimplanta a stack e reaplica a tag testada escolhida."
-        ;;
-      n8n)
-        desc="n8n||Reimplanta editor, webhook, worker e runners com a versão testada."
-        ;;
-      uptime-kuma)
-        desc="Uptime Kuma||Reimplanta a stack e permite alternar entre v1 e v2."
-        ;;
-      evolution-api)
-        desc="Evolution API||Reimplanta a stack com a tag testada da API."
-        ;;
       *)
         if [[ -f "$VPS_INSTALLER_SOURCE_DIR/apps/$app_type/app.env" ]]; then
           desc="$(appdef_label_or_default "$app_type" "$app_name")||Reimplanta a stack com a tag testada escolhida."
@@ -336,11 +181,6 @@ recipe_update_installed_tool() {
         *) fail "Ferramenta base não suportada: $selected" ;;
       esac
       ;;
-    postgres) recipe_update_postgres "$app_file" ;;
-    redis) recipe_update_redis "$app_file" ;;
-    n8n) recipe_update_n8n "$app_file" ;;
-    uptime-kuma) recipe_update_uptime_kuma "$app_file" ;;
-    evolution-api) recipe_update_evolution_api "$app_file" ;;
     *)
       if [[ -f "$VPS_INSTALLER_SOURCE_DIR/apps/$APP_TYPE/app.env" ]]; then
         recipe_update_generic "$app_file"

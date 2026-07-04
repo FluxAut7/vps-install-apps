@@ -2,7 +2,8 @@
 
 appdef_reset() {
   unset APP_SLUG APP_LABEL APP_DESCRIPTION APP_CATEGORY APP_IMAGE_REPO APP_TESTED_TAGS \
-    APP_DOMAINS APP_SECRETS APP_INPUTS APP_NEEDS_POSTGRES APP_NEEDS_REDIS APP_SUMMARY_LINES
+    APP_DOMAINS APP_SECRETS APP_INPUTS APP_NEEDS_POSTGRES APP_NEEDS_REDIS APP_SUMMARY_LINES \
+    APP_STATE_LINES
 }
 
 appdef_dir() {
@@ -61,6 +62,7 @@ appdef_load() {
   APP_SECRETS="${APP_SECRETS:-}"
   APP_INPUTS="${APP_INPUTS:-}"
   APP_SUMMARY_LINES="${APP_SUMMARY_LINES:-}"
+  APP_STATE_LINES="${APP_STATE_LINES:-}"
 }
 
 appdef_dependencies_text() {
@@ -102,6 +104,39 @@ appdef_split_semicolons() {
   local bak="$IFS"
   IFS=';' read -r -a __appdef_split_result <<< "$input"
   IFS="$bak"
+}
+
+appdef_apply_state_lines() {
+  # Persiste variáveis derivadas (ex.: POSTGRES_HOST/URL de uma dependência) no
+  # arquivo de estado do app. Cada item é "CHAVE=modelo", com placeholders
+  # __VAR__ resolvidos a partir do estado já salvo do app.
+  local app_file="$1"
+  [[ -n "$APP_STATE_LINES" ]] || return 0
+
+  # shellcheck disable=SC1090
+  (
+    . "$app_file"
+    local -a lines=()
+    appdef_split_semicolons "$APP_STATE_LINES"
+    lines=("${__appdef_split_result[@]}")
+
+    local line key template
+    for line in "${lines[@]}"; do
+      [[ -n "$line" ]] || continue
+      key="${line%%=*}"
+      template="${line#*=}"
+      while [[ "$template" == *"__"*"__"* ]]; do
+        local before rest var value
+        before="${template%%__*}"
+        rest="${template#*__}"
+        var="${rest%%__*}"
+        rest="${rest#*__}"
+        value="$(eval 'printf "%s" "${'"$var"':-}"')"
+        template="${before}${value}${rest}"
+      done
+      state_set "$key" "$template" "$app_file"
+    done
+  )
 }
 
 appdef_render_summary() {

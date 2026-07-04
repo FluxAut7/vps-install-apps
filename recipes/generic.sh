@@ -10,7 +10,11 @@ recipe_generic_install() {
   ui_confirm_values "Mapa de dependências" "$(appdef_dependencies_text)" || return 0
   dependencies_require_base
 
-  [[ "$APP_NEEDS_POSTGRES" == "true" ]] && recipe_postgres_ensure_default
+  if [[ "$APP_NEEDS_POSTGRES" == "true" ]]; then
+    recipe_postgres_ensure_default
+    # ensure_default carrega o manifesto "postgres"; recarrega o do app atual.
+    appdef_load "$slug"
+  fi
 
   local suffix stack_name
   suffix="$(ui_input "Sufixo opcional da stack, vazio para $slug" "")"
@@ -109,6 +113,7 @@ recipe_generic_install() {
   local deploy_ok=1
   portainer_deploy_stack "$stack_name" "$stack_file" || deploy_ok=0
   state_register_app "$stack_name" "$stack_name" "$slug" "$first_domain" "$app_image" "$stack_file"
+  appdef_apply_state_lines "$app_file"
 
   if [[ "$deploy_ok" -eq 0 ]]; then
     ui_warn "'$stack_name' foi registrada no inventário, mas os serviços não convergiram. Revise antes de usar."
@@ -123,32 +128,4 @@ recipe_generic_install() {
     appdef_render_summary "$app_file"
   fi
   ui_pause
-}
-
-recipe_generic_catalog_menu() {
-  local -a slugs=()
-  local slug
-  while read -r slug; do
-    [[ -n "$slug" ]] || continue
-    slugs+=("$slug")
-  done < <(appdef_list_slugs | sort)
-
-  if [[ "${#slugs[@]}" -eq 0 ]]; then
-    installer_header
-    ui_warn "Nenhum app do catálogo data-driven disponível em apps/."
-    ui_pause
-    return 0
-  fi
-
-  local -a items=()
-  for slug in "${slugs[@]}"; do
-    appdef_load "$slug"
-    items+=("$slug" "$APP_LABEL||$APP_DESCRIPTION")
-  done
-
-  local selected
-  selected="$(installer_menu_with_summary "Catálogo de ferramentas" "${items[@]}" "0" "Voltar||Retorna ao menu Ferramentas.")"
-  [[ -n "$selected" && "$selected" != "0" ]] || return 0
-
-  recipe_generic_install "$selected"
 }

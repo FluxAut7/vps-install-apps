@@ -14,14 +14,14 @@ services:
           - node.role == manager
 
   api:
-    image: __EVOLUTION_IMAGE__
+    image: __APP_IMAGE__
     volumes:
       - __STACK_NAME___instances:/evolution/instances
     networks:
       - __NETWORK_NAME__
     environment:
-      SERVER_URL: "https://__DOMAIN__"
-      AUTHENTICATION_API_KEY: "__API_KEY__"
+      SERVER_URL: "https://__APP_DOMAIN__"
+      AUTHENTICATION_API_KEY: "__EVOLUTION_API_KEY__"
       AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "true"
       LANGUAGE: pt-BR
       DATABASE_ENABLED: "true"
@@ -46,7 +46,7 @@ services:
           - node.role == manager
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.__STACK_NAME__.rule=Host(`__DOMAIN__`)"
+        - "traefik.http.routers.__STACK_NAME__.rule=Host(`__APP_DOMAIN__`)"
         - "traefik.http.routers.__STACK_NAME__.entrypoints=websecure"
         - "traefik.http.routers.__STACK_NAME__.tls.certresolver=letsencryptresolver"
         - "traefik.http.services.__STACK_NAME__.loadbalancer.server.port=8080"

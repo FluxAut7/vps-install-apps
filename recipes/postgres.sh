@@ -1,95 +1,43 @@
 #!/usr/bin/env bash
+# PostgreSQL é instalado como qualquer outra ferramenta pelo catálogo
+# (apps/postgres via recipe_generic_install). Este arquivo mantém apenas os
+# auxiliares do "PostgreSQL padrão" compartilhado, usados por apps que dependem
+# do banco (APP_NEEDS_POSTGRES=true).
 
-recipe_postgres_install() {
-  ui_clear
-  ui_title "Instalar PostgreSQL"
-  dependencies_confirm "postgres" || return 0
-  dependencies_require_base
-
-  local suffix stack_name service_name password stack_file network_name postgres_tag postgres_image
-  suffix="$(ui_input "Sufixo opcional da stack, vazio para postgres" "")"
-  if [[ -n "$suffix" ]]; then
-    stack_name="postgres_$suffix"
-    service_name="postgres_$suffix"
-  else
-    stack_name="postgres"
-    service_name="postgres"
-  fi
-
-  if portainer_stack_exists "$stack_name"; then
-    fail "Stack ja existe: $stack_name"
-  fi
-
-  postgres_tag="$(catalog_select_postgres_tag)"
-  postgres_image="$(catalog_postgres_image "$postgres_tag")"
-  password="$(state_random_hex 16)"
-  stack_file="$(stack_path "$stack_name")"
-
-  network_name="$(state_get NETWORK_NAME)"
-  [[ -n "$network_name" ]] || fail "Rede não configurada. Instale a base primeiro."
-
-  stack_render "$VPS_INSTALLER_SOURCE_DIR/templates/postgres.yml" "$stack_file" \
-    STACK_NAME "$stack_name" \
-    SERVICE_NAME "$service_name" \
-    NETWORK_NAME "$network_name" \
-    POSTGRES_IMAGE "$postgres_image" \
-    POSTGRES_PASSWORD "$password"
-
-  local deploy_ok=1
-  portainer_deploy_stack "$stack_name" "$stack_file" || deploy_ok=0
-  state_register_app "$stack_name" "$stack_name" "postgres" "" "$postgres_image" "$stack_file"
-  state_set POSTGRES_TAG "$postgres_tag" "$APP_STATE_DIR/${stack_name}.env"
-  state_set POSTGRES_HOST "$service_name" "$APP_STATE_DIR/${stack_name}.env"
-  state_set POSTGRES_USER "postgres" "$APP_STATE_DIR/${stack_name}.env"
-  state_set POSTGRES_PASSWORD "$password" "$APP_STATE_DIR/${stack_name}.env"
-  state_set POSTGRES_URL "postgresql://postgres:$password@$service_name:5432/postgres" "$APP_STATE_DIR/${stack_name}.env"
-
-  if [[ "$deploy_ok" -eq 0 ]]; then
-    ui_warn "'$stack_name' foi registrada no inventário, mas os serviços não convergiram. Revise antes de usar."
-    ui_pause
-    return 0
-  fi
-
-  ui_success "PostgreSQL instalado."
-  echo "Host: $service_name"
-  echo "Usuário: postgres"
-  echo "Senha: $password"
-  ui_pause
-}
-
+# Instala a stack "postgres" padrão de forma não interativa, gravando o contrato
+# (POSTGRES_HOST/USER/PASSWORD/URL) que os apps dependentes consomem.
 recipe_postgres_install_default() {
   dependencies_require_base
 
   local stack_name="postgres"
-  local service_name="postgres"
-  local password stack_file network_name postgres_tag postgres_image
-
   if portainer_stack_exists "$stack_name"; then
     return 0
   fi
 
-  postgres_tag="$(catalog_select_postgres_tag)"
-  postgres_image="$(catalog_postgres_image "$postgres_tag")"
+  appdef_load "postgres"
+
+  local app_tag app_image password stack_file network_name app_file
+  app_tag="$(appdef_select_tag "postgres")"
+  [[ -n "$app_tag" ]] || fail "Nenhuma tag testada de PostgreSQL disponível."
+  app_image="$(appdef_image "$app_tag")"
   password="$(state_random_hex 16)"
   stack_file="$(stack_path "$stack_name")"
   network_name="$(state_get NETWORK_NAME)"
   [[ -n "$network_name" ]] || fail "Rede não configurada. Instale a base primeiro."
+  app_file="$APP_STATE_DIR/${stack_name}.env"
 
-  stack_render "$VPS_INSTALLER_SOURCE_DIR/templates/postgres.yml" "$stack_file" \
+  stack_render "$(appdef_template_path postgres)" "$stack_file" \
     STACK_NAME "$stack_name" \
-    SERVICE_NAME "$service_name" \
     NETWORK_NAME "$network_name" \
-    POSTGRES_IMAGE "$postgres_image" \
+    APP_IMAGE "$app_image" \
+    APP_IMAGE_TAG "$app_tag" \
     POSTGRES_PASSWORD "$password"
 
   local deploy_ok=1
   portainer_deploy_stack "$stack_name" "$stack_file" || deploy_ok=0
-  state_register_app "$stack_name" "$stack_name" "postgres" "" "$postgres_image" "$stack_file"
-  state_set POSTGRES_TAG "$postgres_tag" "$APP_STATE_DIR/${stack_name}.env"
-  state_set POSTGRES_HOST "$service_name" "$APP_STATE_DIR/${stack_name}.env"
-  state_set POSTGRES_USER "postgres" "$APP_STATE_DIR/${stack_name}.env"
-  state_set POSTGRES_PASSWORD "$password" "$APP_STATE_DIR/${stack_name}.env"
-  state_set POSTGRES_URL "postgresql://postgres:$password@$service_name:5432/postgres" "$APP_STATE_DIR/${stack_name}.env"
+  state_register_app "$stack_name" "$stack_name" "postgres" "" "$app_image" "$stack_file"
+  state_set POSTGRES_PASSWORD "$password" "$app_file"
+  appdef_apply_state_lines "$app_file"
 
   [[ "$deploy_ok" -eq 1 ]] || fail "PostgreSQL padrão não convergiu. Verifique 'docker service ls' antes de continuar."
 }

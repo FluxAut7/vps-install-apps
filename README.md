@@ -30,34 +30,37 @@ VPS_INSTALLER_ARCHIVE_URL="https://github.com/FluxAut7/vps-install-apps/archive/
 
 ## O que a v1 instala
 
+Base da VPS:
+
 - Docker e Docker Swarm single-node
 - Rede overlay interna
 - Traefik com HTTPS via Let's Encrypt
 - Portainer LTS/STS
-- PostgreSQL
-- Redis
-- n8n com runners externos obrigatórios
-- Uptime Kuma v1/v2
-- Evolution API
 
 ## Catálogo de ferramentas (data-driven)
 
-Além das receitas acima, o menu `Ferramentas > Catálogo de ferramentas` instala apps
-adicionais definidos por manifesto, sem código dedicado por app. Cada app vive em
-`apps/<slug>/` com dois arquivos:
+Todas as ferramentas ficam numa única tabela: o menu `Ferramentas` lista cada app
+diretamente na raiz. Não há mais receitas dedicadas por app — tudo é definido por
+manifesto. Cada app vive em `apps/<slug>/` com dois arquivos:
 
 - `app.env`: manifesto declarativo (label, imagem, tags testadas, domínios, entradas,
-  segredos gerados, dependências de Postgres/Redis, linhas de resumo).
+  segredos gerados, dependências de Postgres/Redis, linhas de resumo e, quando o app é
+  uma dependência compartilhada, linhas de estado `APP_STATE_LINES`).
 - `stack.yml`: template do compose com placeholders `__CHAVE__`.
 
 A receita genérica (`recipes/generic.sh`) interpreta o manifesto, coleta domínios e
-entradas, gera segredos, renderiza o template e publica via Portainer. Apps do catálogo
-aparecem no painel, no menu de atualização e no backup como as demais ferramentas.
+entradas, gera segredos, renderiza o template e publica via Portainer. Todo app
+aparece no painel, no menu de atualização e no backup da mesma forma.
 
-Apps já incluídos no catálogo:
+Apps incluídos no catálogo:
 
 | App | Categoria | Dependências |
 |---|---|---|
+| PostgreSQL | Banco relacional padrão | — |
+| Redis | Cache / fila | — |
+| n8n | Automação (editor, webhook, worker, runners) | PostgreSQL padrão + Redis na stack |
+| Uptime Kuma | Monitoramento v1/v2 | — |
+| Evolution API | API de WhatsApp | PostgreSQL padrão + Redis na stack |
 | MinIO | Object storage S3 | — |
 | RabbitMQ | Broker de filas | — |
 | Qdrant | Banco vetorial | — |

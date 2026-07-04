@@ -14,7 +14,7 @@ services:
           - node.role == manager
 
   editor:
-    image: __N8N_IMAGE__
+    image: __APP_IMAGE__
     command: start
     environment:
       DB_TYPE: postgresdb
@@ -24,8 +24,8 @@ services:
       DB_POSTGRESDB_USER: postgres
       DB_POSTGRESDB_PASSWORD: "__POSTGRES_PASSWORD__"
       N8N_ENCRYPTION_KEY: "__N8N_ENCRYPTION_KEY__"
-      N8N_HOST: "__EDITOR_DOMAIN__"
-      N8N_EDITOR_BASE_URL: "https://__EDITOR_DOMAIN__/"
+      N8N_HOST: "__APP_DOMAIN__"
+      N8N_EDITOR_BASE_URL: "https://__APP_DOMAIN__/"
       WEBHOOK_URL: "https://__WEBHOOK_DOMAIN__/"
       N8N_PROTOCOL: https
       NODE_ENV: production
@@ -55,14 +55,14 @@ services:
           - node.role == manager
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.__STACK_NAME___editor.rule=Host(`__EDITOR_DOMAIN__`)"
+        - "traefik.http.routers.__STACK_NAME___editor.rule=Host(`__APP_DOMAIN__`)"
         - "traefik.http.routers.__STACK_NAME___editor.entrypoints=websecure"
         - "traefik.http.routers.__STACK_NAME___editor.tls.certresolver=letsencryptresolver"
         - "traefik.http.services.__STACK_NAME___editor.loadbalancer.server.port=5678"
         - "traefik.docker.network=__NETWORK_NAME__"
 
   webhook:
-    image: __N8N_IMAGE__
+    image: __APP_IMAGE__
     command: webhook
     environment:
       DB_TYPE: postgresdb
@@ -72,8 +72,8 @@ services:
       DB_POSTGRESDB_USER: postgres
       DB_POSTGRESDB_PASSWORD: "__POSTGRES_PASSWORD__"
       N8N_ENCRYPTION_KEY: "__N8N_ENCRYPTION_KEY__"
-      N8N_HOST: "__EDITOR_DOMAIN__"
-      N8N_EDITOR_BASE_URL: "https://__EDITOR_DOMAIN__/"
+      N8N_HOST: "__APP_DOMAIN__"
+      N8N_EDITOR_BASE_URL: "https://__APP_DOMAIN__/"
       WEBHOOK_URL: "https://__WEBHOOK_DOMAIN__/"
       N8N_PROTOCOL: https
       NODE_ENV: production
@@ -108,7 +108,7 @@ services:
         - "traefik.docker.network=__NETWORK_NAME__"
 
   worker:
-    image: __N8N_IMAGE__
+    image: __APP_IMAGE__
     command: worker --concurrency=10
     environment:
       DB_TYPE: postgresdb
@@ -118,7 +118,7 @@ services:
       DB_POSTGRESDB_USER: postgres
       DB_POSTGRESDB_PASSWORD: "__POSTGRES_PASSWORD__"
       N8N_ENCRYPTION_KEY: "__N8N_ENCRYPTION_KEY__"
-      N8N_HOST: "__EDITOR_DOMAIN__"
+      N8N_HOST: "__APP_DOMAIN__"
       WEBHOOK_URL: "https://__WEBHOOK_DOMAIN__/"
       N8N_PROTOCOL: https
       NODE_ENV: production
@@ -144,7 +144,7 @@ services:
           - node.role == manager
 
   runners:
-    image: __N8N_RUNNERS_IMAGE__
+    image: n8nio/runners:__APP_IMAGE_TAG__
     command: ["javascript", "python"]
     environment:
       N8N_RUNNERS_TASK_BROKER_URI: "http://__STACK_NAME___worker:5679"

@@ -10,6 +10,8 @@ export VPS_INSTALLER_SOURCE_DIR="$SCRIPT_DIR"
 . "$SCRIPT_DIR/lib/state.sh"
 # shellcheck source=lib/system.sh
 . "$SCRIPT_DIR/lib/system.sh"
+# shellcheck source=lib/security.sh
+. "$SCRIPT_DIR/lib/security.sh"
 # shellcheck source=lib/dns.sh
 . "$SCRIPT_DIR/lib/dns.sh"
 # shellcheck source=lib/stack.sh
@@ -1033,6 +1035,29 @@ backup_menu() {
   done
 }
 
+security_menu() {
+  while true; do
+    local choice ssh_port
+    choice="$(installer_menu_with_summary "Seguranca" \
+      "1" "Auditoria de seguranca||Verifica firewall, SSH, servicos de protecao e portas expostas sem alterar a VPS." \
+      "2" "Aplicar baseline||Instala UFW, Fail2ban e atualizacoes de seguranca; libera somente SSH, HTTP e HTTPS." \
+      "3" "Instalar ou atualizar antivirus||Instala ClamAV e atualiza as assinaturas de ameacas." \
+      "4" "Verificar diretorios usuais||Varre /home, /root, /opt e /var/www sem apagar arquivos." \
+      "5" "Verificar volumes Docker||Varre dados persistidos dos containers; pode levar mais tempo." \
+      "6" "Ver ultimo relatorio||Mostra o resumo da ultima varredura ClamAV." \
+      "0" "Voltar||Retorna ao menu principal.")"
+
+    case "$choice" in
+      1) installer_header; security_audit; ui_pause ;;
+      2) ssh_port="$(security_ssh_port)"; security_apply_baseline "$ssh_port"; ui_pause ;;
+      3) security_install_antivirus; ui_pause ;;
+      4) security_scan_common_paths; ui_pause ;;
+      5) security_scan_docker_volumes; ui_pause ;;
+      6) installer_header; security_show_latest_scan; ui_pause ;;
+      0|"") return 0 ;;
+    esac
+  done
+}
 vps_menu() {
   while true; do
     local choice
@@ -1122,11 +1147,13 @@ main_menu() {
         "1" "VPS||Base da VPS, painel detalhado, pacotes e backup." \
         "2" "Ferramentas||Instalação, atualização e remoção de stacks." \
         "3" "Portainer||Credenciais e operações que dependem da API do Portainer." \
+        "4" "Seguranca||Auditoria, firewall, protecao contra forca bruta e antivirus." \
         "0" "Sair||Encerra o instalador.")"
     else
       choice="$(installer_menu_with_summary "Menu principal" \
         "1" "VPS||Base da VPS, painel detalhado, pacotes e backup." \
         "2" "Ferramentas||Instalação, atualização e remoção de stacks." \
+        "4" "Seguranca||Auditoria, firewall, protecao contra forca bruta e antivirus." \
         "0" "Sair||Encerra o instalador.")"
     fi
 
@@ -1138,6 +1165,7 @@ main_menu() {
           portainer_menu
         fi
         ;;
+      4) security_menu ;;
       0|"") ui_info "Saindo."; exit 0 ;;
     esac
   done

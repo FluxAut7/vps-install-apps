@@ -9,6 +9,7 @@ set -Eeuo pipefail
 
 DEFAULT_ARCHIVE_URL="https://github.com/FluxAut7/vps-install-apps/archive/refs/heads/main.tar.gz"
 ARCHIVE_URL="${VPS_INSTALLER_ARCHIVE_URL:-$DEFAULT_ARCHIVE_URL}"
+BOOTSTRAP_TMP_DIR=""
 
 info() { printf '\033[1;32m[OK]\033[0m %s\n' "$*"; }
 fail() { printf '\033[1;31m[ERRO]\033[0m %s\n' "$*" >&2; exit 1; }
@@ -21,24 +22,23 @@ main() {
   require_command curl
   require_command tar
 
-  local tmp_dir
-  tmp_dir="$(mktemp -d)"
-  trap 'rm -rf "$tmp_dir"' EXIT
+  BOOTSTRAP_TMP_DIR="$(mktemp -d)"
+  trap '[[ -n "${BOOTSTRAP_TMP_DIR:-}" ]] && rm -rf "$BOOTSTRAP_TMP_DIR"' EXIT
 
   info "Baixando instalador..."
-  curl -fsSL "$ARCHIVE_URL" | tar -xz --strip-components=1 -C "$tmp_dir"
+  curl -fsSL "$ARCHIVE_URL" | tar -xz --strip-components=1 -C "$BOOTSTRAP_TMP_DIR"
 
-  [[ -f "$tmp_dir/installer.sh" ]] || fail "installer.sh não encontrado no pacote baixado."
-  chmod +x "$tmp_dir/installer.sh"
+  [[ -f "$BOOTSTRAP_TMP_DIR/installer.sh" ]] || fail "installer.sh não encontrado no pacote baixado."
+  chmod +x "$BOOTSTRAP_TMP_DIR/installer.sh"
 
   if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
     require_command sudo
     info "Elevando permissao com sudo..."
-    sudo -E bash "$tmp_dir/installer.sh" "$@"
+    sudo -E bash "$BOOTSTRAP_TMP_DIR/installer.sh" "$@"
     exit $?
   fi
 
-  bash "$tmp_dir/installer.sh" "$@"
+  bash "$BOOTSTRAP_TMP_DIR/installer.sh" "$@"
 }
 
 main "$@"

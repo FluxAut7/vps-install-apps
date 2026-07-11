@@ -18,3 +18,14 @@ setup() {
   [ "$status" -eq 0 ]
   [ "$output" = "9000/tcp docker-proxy,pid=1" ]
 }
+
+@test "security_list_public_ports reports wildcard listeners" {
+  ss() {
+    printf '%s\n' 'tcp LISTEN 0 4096 *:443 *:* users:((traefik,pid=2))'
+  }
+
+  run security_list_public_ports
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "443/tcp traefik,pid=2" ]
+}

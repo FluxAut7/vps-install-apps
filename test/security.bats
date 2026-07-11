@@ -29,3 +29,24 @@ setup() {
   [ "$status" -eq 0 ]
   [ "$output" = "443/tcp traefik,pid=2" ]
 }
+@test "security_list_public_ports tolerates ss failure" {
+  ss() {
+    return 1
+  }
+
+  run security_list_public_ports
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
+}
+
+@test "security_ssh_setting tolerates sshd failure" {
+  sshd() {
+    return 1
+  }
+
+  run security_ssh_setting permitrootlogin
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
+}

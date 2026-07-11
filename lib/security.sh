@@ -4,6 +4,7 @@
 
 security_ssh_port() {
   local port
+  command -v sshd >/dev/null 2>&1 || { printf '%s' '22'; return 0; }
   port="$(sshd -T 2>/dev/null | awk '$1 == "port" { print $2; exit }' || true)"
   printf '%s' "${port:-22}"
 }
@@ -14,16 +15,20 @@ security_service_state() {
 }
 
 security_ufw_status() {
+  local status
   command -v ufw >/dev/null 2>&1 || { printf '%s' 'não instalado'; return 0; }
-  ufw status 2>/dev/null | awk 'NR == 1 { print $2; exit }'
+  status="$(ufw status 2>/dev/null | awk 'NR == 1 { print $2; exit }' || true)"
+  printf '%s' "${status:-indisponível}"
 }
 
 security_ssh_setting() {
   local setting="$1"
-  sshd -T 2>/dev/null | awk -v key="$setting" '$1 == key { print $2; exit }'
+  command -v sshd >/dev/null 2>&1 || return 0
+  sshd -T 2>/dev/null | awk -v key="$setting" '$1 == key { print $2; exit }' || true
 }
 
 security_list_public_ports() {
+  command -v ss >/dev/null 2>&1 || return 0
   ss -lntupH 2>/dev/null | awk '
     $5 ~ /^(\*|0\.0\.0\.0|\[::\]|:::)/ {
       split($5, addr, ":")
@@ -33,7 +38,7 @@ security_list_public_ports() {
       gsub(/\).*/, "", process)
       printf "%s/%s %s\n", port, $1, process
     }
-  ' | sort -u
+  ' | sort -u || true
 }
 
 security_audit() {
@@ -69,8 +74,8 @@ security_audit() {
   echo >&2
   ui_section "Recomendações"
   [[ "$ufw_state" == "active" ]] || ui_warn "Firewall inativo: aplique o baseline para liberar SSH, HTTP e HTTPS."
-  [[ "$root_login" == "no" || "$root_login" == "prohibit-password" ]] || ui_warn "SSH permite login root. Prefira usuário sudo com chave SSH."
-  [[ "$password_auth" == "no" ]] || ui_warn "SSH aceita senhas. Migre uma chave SSH testada antes de desabilitar senhas."
+  [[ -z "$root_login" || "$root_login" == "no" || "$root_login" == "prohibit-password" ]] || ui_warn "SSH permite login root. Prefira usuário sudo com chave SSH."
+  [[ -z "$password_auth" || "$password_auth" == "no" ]] || ui_warn "SSH aceita senhas. Migre uma chave SSH testada antes de desabilitar senhas."
   [[ "$unattended" == "ativo" ]] || ui_warn "Atualizações automáticas de segurança não estão ativas."
   [[ "$fail2ban" == "ativo" ]] || ui_warn "Fail2ban não está ativo; tentativas repetidas de login não são bloqueadas."
   if printf '%s\n' "$public_ports" | grep -q '^9000/'; then
